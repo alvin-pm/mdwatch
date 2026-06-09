@@ -573,6 +573,43 @@ const server = http.createServer((req, res) => {
     res.end(`Not found: ${absPath}`);
     return;
   }
+  // 비-마크다운 파일은 그대로 서빙 (이미지/CSS/JS 등 — markdown 렌더 우회)
+  const ext = path.extname(absPath).toLowerCase();
+  if (ext && ext !== '.md' && ext !== '.markdown') {
+    const MIME = {
+      '.svg': 'image/svg+xml',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.ico': 'image/x-icon',
+      '.bmp': 'image/bmp',
+      '.avif': 'image/avif',
+      '.css': 'text/css; charset=utf-8',
+      '.js': 'text/javascript; charset=utf-8',
+      '.mjs': 'text/javascript; charset=utf-8',
+      '.json': 'application/json; charset=utf-8',
+      '.pdf': 'application/pdf',
+      '.html': 'text/html; charset=utf-8',
+      '.htm': 'text/html; charset=utf-8',
+      '.txt': 'text/plain; charset=utf-8',
+      '.woff': 'font/woff',
+      '.woff2': 'font/woff2',
+      '.ttf': 'font/ttf',
+      '.otf': 'font/otf',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+    };
+    const mime = MIME[ext] || 'application/octet-stream';
+    try {
+      res.writeHead(200, { 'Content-Type': mime });
+      fs.createReadStream(absPath).pipe(res);
+    } catch (e) {
+      res.writeHead(500); res.end(e.message);
+    }
+    return;
+  }
   try {
     const html = buildHTML(fs.readFileSync(absPath, 'utf8'), absPath);
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
