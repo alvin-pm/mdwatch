@@ -167,6 +167,7 @@ function diffLines(oldContent, newContent) {
 
 // 마크다운 렌더링 (data-line 속성 포함) — marked v15 API
 let _mermaidMap = {};
+let _chartMap = {};  // marker → {spec, id, line}
 let _firstPara = true;
 
 marked.use({
@@ -180,6 +181,10 @@ marked.use({
       if (token.text in _mermaidMap) {
         const origLine = parseInt(token.text.replace('MERMAIDBLOCK', '')) || l;
         return `<div data-line="${origLine}" class="mermaid">${_mermaidMap[token.text]}</div>\n`;
+      }
+      if (token.text in _chartMap) {
+        const c = _chartMap[token.text];
+        return `<div data-line="${c.line}" class="echarts-chart" data-chart-id="${c.id}"></div>\n`;
       }
       const isFirst = _firstPara;
       _firstPara = false;
@@ -232,9 +237,42 @@ marked.use({
   }
 });
 
+// Embed 처리: `<!--embeds-->` 마커 아래의 `{{$name}}...{{/name}}` 정의를 수집해
+// 본문의 `{{$name}}` 참조 자리에 inline한 .md 텍스트와 메타 반환.
+function processEmbeds(mdContent) {
+  const embedMarker = mdContent.match(/^<!--\s*embeds\s*-->\s*$/m);
+  if (!embedMarker) return { flattened: mdContent, hasEmbeds: false, count: 0 };
+  const body = mdContent.slice(0, embedMarker.index);
+  const defs = mdContent.slice(embedMarker.index + embedMarker[0].length);
+  const embedMap = {};
+  const DEF_RE = /\{\{\$([A-Za-z_][\w-]*)\}\}\s*\n([\s\S]*?)\n\s*\{\{\/\1\}\}/g;
+  let m;
+  while ((m = DEF_RE.exec(defs)) !== null) embedMap[m[1]] = m[2];
+  let refCount = 0;
+  const flattened = body.replace(/\{\{\$([A-Za-z_][\w-]*)\}\}/g, (orig, name) => {
+    if (embedMap[name] !== undefined) { refCount++; return embedMap[name]; }
+    return orig;
+  });
+  return { flattened: flattened.replace(/\n+$/, '\n'), hasEmbeds: true, count: refCount };
+}
+
 function renderContent(mdContent) {
   _mermaidMap = {};
+  _chartMap = {};
   _firstPara = true;
+
+  mdContent = processEmbeds(mdContent).flattened;
+
+  // ECharts 차트 펜스: ```chart:echarts ... ``` → 마커 치환, spec 수집
+  mdContent = mdContent.replace(/```chart:echarts\n([\s\S]*?)\n```/g, (match, spec, offset) => {
+    const startLine = mdContent.slice(0, offset).split('\n').length;
+    const id = Object.keys(_chartMap).length;
+    const key = `ECHARTSBLOCK${startLine}_${id}`;
+    _chartMap[key] = { spec: spec.trim(), id, line: startLine };
+    const origNewlines = (match.match(/\n/g) || []).length;
+    return key + '\n'.repeat(origNewlines);
+  });
+
   const processed = mdContent.replace(/```mermaid\n([\s\S]*?)```/g, (match, diagram, offset) => {
     const startLine = mdContent.slice(0, offset).split('\n').length;
     const key = `MERMAIDBLOCK${startLine}`;
@@ -267,6 +305,10 @@ function buildHTML(mdContent, filePath) {
   const displayPath = filePath.startsWith(ROOT + path.sep)
     ? path.relative(ROOT, filePath)
     : filePath.replace(process.env.HOME, '~');
+  const embedMeta = processEmbeds(mdContent);
+  const chartCount = Object.keys(_chartMap).length;
+  const chartSpecs = Object.values(_chartMap).map(c => c.spec);
+  const hasShareable = embedMeta.hasEmbeds || chartCount > 0;
 
   return `<!DOCTYPE html>
 <html data-theme="${initialTheme}">
@@ -274,6 +316,7 @@ function buildHTML(mdContent, filePath) {
 <meta charset="utf-8">
 <title>${path.basename(filePath)}</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" onload="window._echartsReady=true;window.dispatchEvent(new Event(\'echarts-ready\'))" onerror="console.error(\'ECharts CDN load failed\')"></script>' : ''}
 <style>
   :root {
     --bg: #ffffff; --fg: #1a1a1a; --code-bg: #f5f5f5; --border: #e0e0e0;
@@ -318,6 +361,15 @@ function buildHTML(mdContent, filePath) {
     opacity: 0.6;
   }
   #theme-toggle:hover { opacity: 1; }
+
+  /* 공유용 변환 버튼 (embed 마커 있는 파일에서만 표시) */
+  #share-btn {
+    position: fixed; top: 14px; right: 110px; z-index: 999;
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--fg); cursor: pointer; font-size: 0.8rem; padding: 4px 10px;
+    opacity: 0.6;
+  }
+  #share-btn:hover { opacity: 1; }
 
   /* 현재 파일 경로 표시 */
   #file-path {
@@ -364,6 +416,7 @@ function buildHTML(mdContent, filePath) {
 </head>
 <body>
 <div id="file-path" title="${filePath}">${displayPath}</div>
+${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[embedMeta.count > 0 ? embedMeta.count + '개 임베드' : '', chartCount > 0 ? chartCount + '개 차트' : ''].filter(Boolean).join(' + ')} 처리 후 단일 .md 다운로드">📤 공유용</button>` : ''}
 <button id="theme-toggle" onclick="toggleTheme()">☀ 라이트</button>
 <div id="md-content">${body}</div>
 <script>
@@ -379,6 +432,39 @@ function buildHTML(mdContent, filePath) {
     const current = document.documentElement.getAttribute('data-theme');
     applyTheme(current === 'dark' ? 'light' : 'dark');
   }
+  async function downloadShare() {
+    const charts = {};
+    let chartTotal = 0, chartCaptured = 0;
+    document.querySelectorAll('.echarts-chart').forEach(div => {
+      chartTotal++;
+      const svg = div.querySelector('svg');
+      if (svg) { charts[div.dataset.chartId] = svg.outerHTML; chartCaptured++; }
+    });
+    if (chartTotal > 0 && chartCaptured < chartTotal) {
+      mdToast(\`차트 \${chartCaptured}/\${chartTotal}만 렌더된 상태 — 잠시 후 다시 시도\`, 'error');
+      return;
+    }
+    try {
+      const res = await fetch('/__share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: ${JSON.stringify(filePath)}, charts })
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition') || '';
+      const m = cd.match(/filename\\*?=(?:UTF-8'')?([^;]+)/i);
+      const fname = m ? decodeURIComponent(m[1].replace(/^"|"$/g, '')) : 'shared.md';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fname;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      mdToast(\`✓ \${fname} 다운로드 (\${(blob.size/1024).toFixed(1)} KB, 차트 \${chartCaptured}개 inline)\`, 'success');
+    } catch (e) {
+      mdToast('공유용 변환 실패: ' + e.message, 'error');
+    }
+  }
   // localStorage 저장값 우선 적용
   const savedTheme = localStorage.getItem('mdwatch-theme');
   if (savedTheme && savedTheme !== '${initialTheme}') applyTheme(savedTheme);
@@ -386,6 +472,62 @@ function buildHTML(mdContent, filePath) {
 
   mermaid.initialize({ startOnLoad: false, theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default' });
   mermaid.run();
+
+  // --- ECharts 차트 초기화 (SVG renderer 모드 — 공유용 변환 시 SVG 추출이 쉬움) ---
+  window._mdwatchChartSpecs = ${JSON.stringify(chartSpecs)};
+  function initECharts() {
+    if (!window.echarts) return;
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.querySelectorAll('.echarts-chart').forEach(div => {
+      if (div.dataset.inited) return;
+      const id = parseInt(div.dataset.chartId);
+      const specStr = window._mdwatchChartSpecs[id];
+      if (!specStr) return;
+      try {
+        const spec = JSON.parse(specStr);
+        const meta = spec._mdwatch || {};
+        const w = meta.width || 800;
+        const h = meta.height || 350;
+        delete spec._mdwatch;
+        div.style.width = w + 'px';
+        div.style.height = h + 'px';
+        div.style.margin = '1em 0';
+        const chart = echarts.init(div, dark ? 'dark' : null, { renderer: 'svg' });
+        chart.setOption(spec);
+        div.dataset.inited = '1';
+      } catch (e) {
+        div.innerHTML = '<pre style="color:#c0392b;background:var(--code-bg);padding:8px;border-radius:4px;">Chart spec 파싱 실패: ' + e.message + '</pre>';
+      }
+    });
+  }
+  if (${chartCount > 0}) {
+    // (1) DOM 준비됐고 ECharts도 이미 로드된 경우
+    if (window._echartsReady || window.echarts) initECharts();
+    // (2) ECharts 로드 완료 이벤트
+    window.addEventListener('echarts-ready', initECharts);
+    // (3) DOMContentLoaded fallback
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initECharts);
+    }
+    // (4) 마지막 보루: 페이지 완전 로드 시점
+    window.addEventListener('load', initECharts);
+  }
+
+  // --- 우상단 toast 피드백 ---
+  function mdToast(msg, kind) {
+    let t = document.getElementById('md-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'md-toast';
+      t.style.cssText = 'position:fixed;top:50px;right:18px;z-index:9999;padding:8px 14px;border-radius:6px;font-size:0.85rem;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:opacity 0.3s;opacity:0;';
+      document.body.appendChild(t);
+    }
+    t.style.background = kind === 'error' ? '#c0392b' : '#2c9e56';
+    t.textContent = msg;
+    t.style.opacity = '1';
+    clearTimeout(t._fadeTimer);
+    t._fadeTimer = setTimeout(() => { t.style.opacity = '0'; }, 2500);
+  }
 
   function getMarkedLines() {
     try { return JSON.parse(localStorage.getItem('mdwatch-marked') || '[]'); } catch { return []; }
@@ -543,6 +685,58 @@ const server = http.createServer((req, res) => {
     res.write(':\n\n');
     attachClient(absPath, res);
     req.on('close', () => detachClient(absPath, res));
+    return;
+  }
+
+  // 공유용 변환: embed inline + chart 펜스를 SVG로 치환한 단일 .md 다운로드
+  if (u.pathname === '/__share') {
+    const handle = (absPath, chartSvgs) => {
+      try {
+        if (!fs.existsSync(absPath)) { res.writeHead(404); res.end('file not found'); return; }
+        let flattened = processEmbeds(fs.readFileSync(absPath, 'utf8')).flattened;
+        // chart 펜스를 순서대로 SVG로 치환 (charts 맵 없으면 펜스 그대로 둠)
+        let chartIdx = 0;
+        flattened = flattened.replace(/```chart:echarts\n[\s\S]*?\n```/g, (orig) => {
+          const svg = chartSvgs[String(chartIdx)] ?? chartSvgs[chartIdx];
+          chartIdx++;
+          return svg || orig;
+        });
+        const base = path.basename(absPath, path.extname(absPath));
+        const downloadName = `${base}.share.md`;
+        // ASCII-only fallback filename + RFC 5987 UTF-8 (브라우저 호환성)
+        const asciiFallback = downloadName.replace(/[^\x20-\x7e]/g, '_');
+        const body = Buffer.from(flattened, 'utf8');
+        res.writeHead(200, {
+          'Content-Type': 'text/markdown; charset=utf-8',
+          'Content-Length': body.length,
+          'Content-Disposition': `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`,
+          'Cache-Control': 'no-store',
+        });
+        res.end(body);
+      } catch (e) {
+        res.writeHead(500); res.end(e.message);
+      }
+    };
+
+    if (req.method === 'POST') {
+      let buf = '';
+      req.on('data', chunk => { buf += chunk; if (buf.length > 50 * 1024 * 1024) { res.writeHead(413); res.end('payload too large'); req.destroy(); } });
+      req.on('end', () => {
+        try {
+          const { file, charts } = JSON.parse(buf || '{}');
+          if (!file) { res.writeHead(400); res.end('missing file'); return; }
+          handle(file, charts || {});
+        } catch (e) {
+          res.writeHead(400); res.end('invalid json: ' + e.message);
+        }
+      });
+      return;
+    }
+
+    // GET 폴백: 차트 SVG 없이 embed만 inline
+    const fileParam = u.searchParams.get('file');
+    if (!fileParam) { res.writeHead(400); res.end('missing file param'); return; }
+    handle(decodeURIComponent(fileParam), {});
     return;
   }
 
