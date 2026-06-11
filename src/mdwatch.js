@@ -256,6 +256,31 @@ function processEmbeds(mdContent) {
   return { flattened: flattened.replace(/\n+$/, '\n'), hasEmbeds: true, count: refCount };
 }
 
+// 마크다운 이미지 참조 중 외부 .svg 파일을 가리키는 개수 카운트
+function countSvgRefs(mdContent) {
+  const matches = mdContent.match(/!\[[^\]]*\]\(([^)\s]+\.svg)(?:\s+"[^"]*")?\)/gi);
+  return matches ? matches.length : 0;
+}
+
+// 공유용 변환 시 외부 .svg 참조를 SVG 본문으로 inline 치환
+function inlineSvgRefs(mdContent, mdFilePath) {
+  const baseDir = path.dirname(mdFilePath);
+  return mdContent.replace(/!\[[^\]]*\]\(([^)\s]+\.svg)(?:\s+"[^"]*")?\)/gi, (orig, src) => {
+    if (/^https?:\/\//i.test(src) || src.startsWith('data:')) return orig;
+    try {
+      const absPath = path.resolve(baseDir, src);
+      // ROOT 밖 경로 차단
+      if (!absPath.startsWith(ROOT + path.sep) && absPath !== ROOT) return orig;
+      if (!fs.existsSync(absPath)) return orig;
+      let svg = fs.readFileSync(absPath, 'utf8');
+      // 인라인 시 불필요한 XML 헤더 제거
+      svg = svg.replace(/^\s*<\?xml[^?]*\?>\s*/i, '')
+               .replace(/^\s*<!DOCTYPE[^>]*>\s*/i, '');
+      return svg.trim();
+    } catch { return orig; }
+  });
+}
+
 function renderContent(mdContent) {
   _mermaidMap = {};
   _chartMap = {};
@@ -308,7 +333,8 @@ function buildHTML(mdContent, filePath) {
   const embedMeta = processEmbeds(mdContent);
   const chartCount = Object.keys(_chartMap).length;
   const chartSpecs = Object.values(_chartMap).map(c => c.spec);
-  const hasShareable = embedMeta.hasEmbeds || chartCount > 0;
+  const svgRefCount = countSvgRefs(mdContent);
+  const hasShareable = embedMeta.hasEmbeds || chartCount > 0 || svgRefCount > 0;
 
   return `<!DOCTYPE html>
 <html data-theme="${initialTheme}">
@@ -416,7 +442,7 @@ ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/ech
 </head>
 <body>
 <div id="file-path" title="${filePath}">${displayPath}</div>
-${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[embedMeta.count > 0 ? embedMeta.count + '개 임베드' : '', chartCount > 0 ? chartCount + '개 차트' : ''].filter(Boolean).join(' + ')} 처리 후 단일 .md 다운로드">📤 공유용</button>` : ''}
+${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[embedMeta.count > 0 ? embedMeta.count + '개 임베드' : '', chartCount > 0 ? chartCount + '개 차트' : '', svgRefCount > 0 ? svgRefCount + '개 SVG' : ''].filter(Boolean).join(' + ')} 처리 후 단일 .md 다운로드">📤 공유용</button>` : ''}
 <button id="theme-toggle" onclick="toggleTheme()">☀ 라이트</button>
 <div id="md-content">${body}</div>
 <script>
@@ -694,6 +720,8 @@ const server = http.createServer((req, res) => {
       try {
         if (!fs.existsSync(absPath)) { res.writeHead(404); res.end('file not found'); return; }
         let flattened = processEmbeds(fs.readFileSync(absPath, 'utf8')).flattened;
+        // 외부 .svg 이미지 참조를 SVG 본문으로 inline
+        flattened = inlineSvgRefs(flattened, absPath);
         // chart 펜스를 순서대로 SVG로 치환 (charts 맵 없으면 펜스 그대로 둠)
         let chartIdx = 0;
         flattened = flattened.replace(/```chart:echarts\n[\s\S]*?\n```/g, (orig) => {
