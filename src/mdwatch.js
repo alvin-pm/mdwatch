@@ -374,6 +374,17 @@ function buildHTML(mdContent, filePath) {
 ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" onload="window._echartsReady=true;window.dispatchEvent(new Event(\'echarts-ready\'))" onerror="console.error(\'ECharts CDN load failed\')"></script>' : ''}
 ${mathCount > 0 ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">\n<script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>' : ''}
 <style>
+  /* D2Coding 웹폰트 폴백: 로컬 설치돼 있으면 local()이 잡혀 다운로드 없음.
+     미설치 환경만 CDN woff2(1.4MB, 캐시됨) 로드 → 어느 환경에서든 코드블록
+     문자 폭이 D2Coding 기준으로 통일됨 (박스문자·화살표 1칸, 한글·원문자 2칸) */
+  @font-face {
+    font-family: 'D2Coding Web';
+    src: local('D2Coding'),
+         url('https://cdn.jsdelivr.net/gh/Joungkyun/font-d2coding/D2Coding.woff2') format('woff2'),
+         url('https://cdn.jsdelivr.net/gh/Joungkyun/font-d2coding/D2Coding.woff') format('woff');
+    font-weight: 400;
+    font-display: swap;
+  }
   :root {
     --bg: #ffffff; --fg: #1a1a1a; --code-bg: #f5f5f5; --border: #e0e0e0;
     --muted: #6b7280; --link: #2563eb; --th-bg: #f9fafb; --td-bd: #e5e7eb;
@@ -395,10 +406,10 @@ ${mathCount > 0 ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/kat
   a { color:var(--link); }
   /* D2Coding: 한글 폭이 영문의 정확히 2배인 코딩 폰트 — ASCII 다이어그램 정렬 보장.
      미설치 환경은 Nanum Gothic Coding(웹폰트)으로 폴백 */
-  code { background:var(--code-bg); padding:0.15em 0.4em; border-radius:3px; font-family:'D2Coding','Nanum Gothic Coding','SF Mono','Fira Code',monospace; font-size:0.9em; }
+  code { background:var(--code-bg); padding:0.15em 0.4em; border-radius:3px; font-family:'D2Coding','D2Coding Web','Nanum Gothic Coding','SF Mono','Fira Code',monospace; font-size:0.9em; }
   pre { background:var(--code-bg); padding:1em; border-radius:6px; overflow-x:auto; margin:1em 0; line-height:1.25; }
   pre code { background:none; padding:0; }
-  pre code.hljs { background:none; padding:0; font-family:'D2Coding','Nanum Gothic Coding','SF Mono','Fira Code',monospace; }
+  pre code.hljs { background:none; padding:0; font-family:'D2Coding','D2Coding Web','Nanum Gothic Coding','SF Mono','Fira Code',monospace; }
   .math-block { margin:1em 0; overflow-x:auto; }
   .math-block .katex-display { margin:0; }
   blockquote { border-left:4px solid var(--muted); padding-left:1em; color:var(--muted); margin:1em 0; }

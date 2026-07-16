@@ -17,7 +17,7 @@ Markdown + Mermaid 라이브 프리뷰 도구 (macOS 전용).
 - **상시 daemon + URL 단위 즐겨찾기** — 한 번 실행하면 백그라운드 상주(~25 MB), 파일별 고유 URL이라 브라우저 북마크 가능.
 - **같은 URL은 기존 탭 focus** — 두 번 열어도 탭이 늘어나지 않습니다.
 - **다크/라이트 테마** — macOS 시스템 설정 자동 감지 + 수동 토글.
-- **한글 코드블록 정렬** — D2Coding 폰트 스택으로 한글 혼용 ASCII 다이어그램이 일그러지지 않습니다. 작성 규칙과 AI 에이전트용 지시문은 [다이어그램 가이드](docs/DIAGRAM-GUIDE.md) 참조.
+- **한글 코드블록 정렬** — 코드블록 폰트를 D2Coding(로컬→웹폰트)으로 통일해, 한글 혼용 다이어그램과 박스문자(`┌─│`)·화살표(`→↑`)가 일그러지지 않습니다. 작성 규칙과 AI 에이전트용 지시문은 [다이어그램 가이드](docs/DIAGRAM-GUIDE.md) 참조.
 
 ## 타 md 뷰어와의 차별점
 
@@ -103,9 +103,8 @@ mdwatch_source/
 - [highlight.js](https://github.com/highlightjs/highlight.js) (BSD-3-Clause) — 코드 하이라이팅
 - [KaTeX](https://github.com/KaTeX/KaTeX) (MIT) — 수식
 - [Apache ECharts](https://github.com/apache/echarts) (Apache-2.0) — 차트
-- [Nanum Gothic Coding](https://fonts.google.com/specimen/Nanum+Gothic+Coding) (OFL-1.1) — 한글 코딩 웹폰트 폴백
-
-권장 로컬 폰트: [D2Coding](https://github.com/naver/d2codingfont) (OFL-1.1, NAVER)
+- [D2Coding](https://github.com/naver/d2codingfont) (OFL-1.1, NAVER) — 한글 코딩 폰트. 로컬 설치본 우선, 미설치 시 [Joungkyun/font-d2coding](https://github.com/Joungkyun/font-d2coding) 미러의 woff2를 jsDelivr로 로드
+- [Nanum Gothic Coding](https://fonts.google.com/specimen/Nanum+Gothic+Coding) (OFL-1.1) — 3차 폴백
 
 ## 개발자
 
