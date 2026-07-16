@@ -9,12 +9,15 @@ Markdown + Mermaid 라이브 프리뷰 도구 (macOS 전용).
 - **Mermaid 다이어그램 렌더링** — Warp/VS Code 기본 뷰어가 지원하지 않는 mermaid가 동작합니다.
 - **저장 시 자동 리프레시** — SSE 기반 부분 업데이트, 스크롤 위치·테마 유지.
 - **변경 줄 하이라이트** — 어디가 바뀌었는지 즉시 표시(3초 박스 → 영구 마커).
+- **코드 syntax highlighting** — highlight.js, 언어 명시 펜스만 (ASCII 다이어그램은 평문 보호). 다크/라이트 동기화.
+- **KaTeX 블록 수식** — `$$...$$` / ` ```math ` 펜스 (인라인 `$`는 금액 표기 오탐 방지를 위해 미지원).
+- **목차(TOC) 패널** — 우상단 접이식, 클릭 스크롤 + 현재 위치 강조.
 - **ECharts 차트 펜스 + embed 문법** — 코드 펜스로 인터랙티브 차트 삽입, 다른 파일 임베드, 공유용 단일 md flatten 내보내기.
 - **이미지·정적 파일 서빙** — svg/img/css/js/pdf 등을 올바른 MIME으로 함께 서빙, 공유 변환 시 외부 svg 자동 인라인.
 - **상시 daemon + URL 단위 즐겨찾기** — 한 번 실행하면 백그라운드 상주(~25 MB), 파일별 고유 URL이라 브라우저 북마크 가능.
 - **같은 URL은 기존 탭 focus** — 두 번 열어도 탭이 늘어나지 않습니다.
 - **다크/라이트 테마** — macOS 시스템 설정 자동 감지 + 수동 토글.
-- **한글 코드블록 정렬** — D2Coding 폰트 스택으로 한글 혼용 ASCII 다이어그램이 일그러지지 않습니다 ([INSTALL.md 4-(4)](docs/INSTALL.md) 참조).
+- **한글 코드블록 정렬** — D2Coding 폰트 스택으로 한글 혼용 ASCII 다이어그램이 일그러지지 않습니다. 작성 규칙과 AI 에이전트용 지시문은 [다이어그램 가이드](docs/DIAGRAM-GUIDE.md) 참조.
 
 ## 타 md 뷰어와의 차별점
 
@@ -22,7 +25,7 @@ live reload 계열 공개 도구는 여럿 있지만, **"저장 시점의 변경
 
 | | 실시간 반영 | 변경 줄 하이라이트 | Mermaid | 차트(ECharts) | 비고 |
 |---|---|---|---|---|---|
-| **mdwatch** | O (SSE 부분 갱신) | **O** (저장 시 diff → fade → 영구 마커) | O | O (펜스) | daemon·URL 즐겨찾기·탭 focus·한글 정렬 |
+| **mdwatch** | O (SSE 부분 갱신) | **O** (저장 시 diff → fade → 영구 마커) | O | O (펜스) | daemon·URL 즐겨찾기·탭 focus·한글 정렬·하이라이팅·KaTeX·TOC |
 | [markserv](https://github.com/markserv/markserv) | O | X | X | X | Node, 2014년부터 유지, KaTeX |
 | [grip](https://github.com/joeyespo/grip) | O (새로고침) | X | X | X | GitHub API 렌더링 — 인터넷 필수·시간당 60회 제한, 2023년 이후 방치 |
 | [mdr](https://github.com/clevercloud/mdr) | O | X | O | X | Rust 단일 바이너리, 경량 |
@@ -51,6 +54,8 @@ mdwatch ~/argo/some_file.md     # 터미널
 
 ## 문서
 
+- **[기능 데모](docs/DEMO.md)** — 하이라이팅·수식·다이어그램·차트·TOC를 한 파일에서 확인 (mdwatch로 열어보세요)
+- **[ASCII 다이어그램 가이드](docs/DIAGRAM-GUIDE.md)** — 깨지지 않는 박스 그리는 규칙 + **AI 에이전트용 복붙 지시문**
 - **[기능 상세](docs/FEATURES.md)** — 각 기능의 동작과 사용법
 - **[아키텍처](docs/ARCHITECTURE.md)** — 전체 구조, 데이터 흐름, TCC 권한 모델
 - **[설치 가이드](docs/INSTALL.md)** — 팀원 배포용 단계별 절차
@@ -83,5 +88,27 @@ mdwatch_source/
 | 외부 의존성 | 없음 (marked는 mdwatch.js에 인라인 번들) |
 | 권장 폰트 | D2Coding — 한글 코드블록/다이어그램 정렬용, 미설치 시 웹폰트 폴백 ([INSTALL.md](docs/INSTALL.md)) |
 | 메모리 점유 | idle 25 MB / 파일 5개 동시 watch 30 MB |
-| 포트 | `localhost:7474` (고정, 변경 시 mdwatch.js 상단 `PORT` 수정) |
-| 루트 디렉토리 | `~/argo` (변경 시 mdwatch.js 상단 `ROOT` 수정) |
+| 포트 | `localhost:7474` (환경변수 `MDWATCH_PORT`로 변경 가능) |
+| 루트 디렉토리 | `~/argo` (환경변수 `MDWATCH_ROOT`로 변경 가능) |
+
+## 크레딧 (서드파티)
+
+번들 포함:
+
+- [marked](https://github.com/markedjs/marked) v15 (MIT, © Christopher Jeffrey) — mdwatch.js에 인라인 번들, 원 저작권 고지는 파일 헤더에 보존
+
+브라우저가 CDN(jsDelivr·Google Fonts)에서 로드 (재배포 아님):
+
+- [Mermaid](https://github.com/mermaid-js/mermaid) (MIT) — 다이어그램
+- [highlight.js](https://github.com/highlightjs/highlight.js) (BSD-3-Clause) — 코드 하이라이팅
+- [KaTeX](https://github.com/KaTeX/KaTeX) (MIT) — 수식
+- [Apache ECharts](https://github.com/apache/echarts) (Apache-2.0) — 차트
+- [Nanum Gothic Coding](https://fonts.google.com/specimen/Nanum+Gothic+Coding) (OFL-1.1) — 한글 코딩 웹폰트 폴백
+
+권장 로컬 폰트: [D2Coding](https://github.com/naver/d2codingfont) (OFL-1.1, NAVER)
+
+## 개발자
+
+- Alvin — <alvin@techtaka.com> / <alvin.j.chey@gmail.com>
+
+라이선스: [MIT](LICENSE)

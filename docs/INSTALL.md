@@ -100,7 +100,7 @@ brew install --cask font-d2coding
 또는 [naver/d2codingfont](https://github.com/naver/d2codingfont) 릴리스에서 다운로드 후 더블클릭 설치.
 
 - 미설치 시 Google Fonts의 `Nanum Gothic Coding` 웹폰트로 자동 폴백되므로 동작에는 문제 없습니다 (오프라인 환경이면 일반 고정폭 폰트로 폴백 → 한글 다이어그램 정렬이 어긋날 수 있음).
-- 참고: 다이어그램을 작성하는 쪽에서도 박스 문자(`┌─│`)·화살표(`→`)·원문자(`①`) 같은 **모호폭(East Asian Ambiguous) 문자를 피하고 ASCII(`+ - | >`)+한글만 쓰는 것**이 안전합니다. 모호폭 문자는 폰트와 무관하게 렌더러마다 1칸/2칸이 달라질 수 있습니다.
+- 폰트는 절반의 해결책입니다 — **다이어그램을 작성하는 쪽의 규칙**(확정폭 문자만 사용 + 폭 검증)이 함께 지켜져야 합니다. AI 에이전트에게 붙여넣을 지시문을 포함한 상세 규칙은 [DIAGRAM-GUIDE.md](DIAGRAM-GUIDE.md) 참조.
 
 ### (4) 브라우저 자동화 권한 (첫 사용 시)
 
