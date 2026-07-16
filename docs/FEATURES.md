@@ -7,7 +7,10 @@
 | Markdown → HTML | marked v15 (GFM 활성화) |
 | Mermaid 다이어그램 | `mermaid@11` CDN, 브라우저 측 렌더링. 다크 테마 자동 적용 |
 | 인라인 HTML | sanitization 없이 그대로 주입 (`style` 속성 포함 모두 동작) |
-| 코드 블록 | `<pre><code>` 평문 출력 (syntax highlighting 미지원) |
+| 코드 블록 | 언어 명시 펜스는 highlight.js@11 CDN으로 syntax highlighting. 언어 없는 블록은 평문 유지 (ASCII 다이어그램 보호) |
+| 수식 (KaTeX) | 단독 줄 `$$...$$` 블록 또는 ` ```math ` 펜스 → KaTeX 렌더링. 인라인 `$...$`는 미지원 ("$12K" 같은 금액 표기 오탐 방지) |
+| ECharts 차트 | ` ```chart:echarts ` 펜스 → SVG 렌더러로 차트. spec은 각 div `data-spec`에 내장 (SSE 갱신 후에도 재초기화) |
+| 목차 (TOC) | 헤딩 2개 이상이면 우상단 "☰ 목차" 버튼 → 접이식 패널 (h1-h4 계층, 클릭 스크롤, scroll-spy 현재 위치 강조, 표시 상태 localStorage 저장) |
 | 테이블 | 첫 헤더가 비어있으면 첫 컬럼 10% 폭으로 자동 좁힘 (행 라벨용) |
 | 이미지 | `max-width: 100%` |
 | 줄 번호 gutter | 모든 블록에 `data-line` 속성 + 좌측 라인 번호 항상 표시 |
@@ -22,6 +25,7 @@
 | SSE 전송 | - | `data: {lines: [3, 7, 8]}` |
 | HTML 부분 교체 | - | `/__content?file=<abs>` fetch → `#md-content.innerHTML` 교체 |
 | Mermaid 재실행 | - | `mermaid.run()` |
+| 부가 렌더 재적용 | - | highlight.js·KaTeX·ECharts·TOC 재실행 (innerHTML 교체로 초기화되므로) |
 | 변경 줄 하이라이트 | 3 s | 노란 배경 + 좌측 박스 (`.changed`) |
 | Fade out | 1.5 s | `.fade-out` 클래스 추가 |
 | 영구 마커 전환 | - | `.marked`로 교체, 라인 번호만 강조 (`localStorage` 저장) |
@@ -34,6 +38,8 @@
 | 토글 버튼 | 우상단 (☀ 라이트 / 🌙 다크) |
 | 저장 | `localStorage.mdwatch-theme` |
 | Mermaid 테마 동기화 | `mermaid.initialize({theme: ...})` |
+| highlight.js 테마 동기화 | github.min.css ↔ github-dark.min.css 스타일시트 스왑 |
+| ECharts 테마 동기화 | 토글 시 dispose 후 dark/light 테마로 재초기화 |
 
 ## URL 구조 & 즐겨찾기
 
@@ -86,10 +92,8 @@
 ## 알려진 제약
 
 - macOS 전용 (`defaults`, `osascript`, `open` 의존)
-- 단일 사용자 (포트 7474 고정, 멀티 인스턴스 불가)
-- 코드 syntax highlighting 미지원
-- 수식 (KaTeX/MathJax) 미지원
-- 목차(TOC) 자동 생성 미지원
+- 단일 사용자 (포트는 `MDWATCH_PORT` 환경변수로 변경 가능하나 daemon당 1개)
+- 수식은 블록 수식만 지원 (인라인 `$...$` 미지원 — 금액 표기 오탐 방지 의도)
 - 검색 기능 없음
 - 파일 트리 탐색 없음
 - HTML sanitization 없음 (의도된 trade-off: 인라인 style 지원)

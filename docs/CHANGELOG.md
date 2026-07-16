@@ -2,6 +2,18 @@
 
 날짜는 작업 완료 시점 기준입니다.
 
+## 2026-07-16 — syntax highlighting + KaTeX + TOC + 환경변수 설정
+
+DEVELOPMENT.md의 "일반적인 변경 시나리오" 중 2·3·4·5·6번 구현.
+
+1. **코드 syntax highlighting** — highlight.js@11 CDN. 언어 명시 펜스만 대상 (언어 없는 블록은 평문 유지 — ASCII 다이어그램 보호). 다크/라이트 스타일시트 스왑.
+2. **KaTeX 블록 수식** — 단독 줄 `$$...$$` / ` ```math ` 펜스. 마커 치환 방식이라 marked 간섭 없음. 인라인 `$...$`는 금액 표기 오탐 방지를 위해 의도적 미지원. 수식 있는 문서만 CDN 로드.
+3. **목차(TOC) 패널** — 우상단 "☰ 목차" 접이식 패널, h1-h4 계층, 클릭 스크롤 + scroll-spy, 상태 localStorage 저장. 헤딩 2개 미만이면 자동 숨김.
+4. **`MDWATCH_PORT` / `MDWATCH_ROOT` 환경변수** — 포트·루트 디렉토리 하드코딩 값 오버라이드.
+5. **버그 수정: SSE 갱신 후 ECharts 차트 소실** — spec을 전역 변수 대신 각 div `data-spec` 속성에 내장하고, 부분 갱신 후 highlight/KaTeX/ECharts/TOC를 재적용.
+6. **테마 토글 시 ECharts 재초기화** — 차트도 다크/라이트 동기화.
+7. **BROWSER_MAP 확장** — Arc·Whale·Chromium·Opera 추가 (크로미움계, 실패 시 기존 `open` 폴백).
+
 ## 2026-07-16 — 코드블록 한글 고정폭 폰트 적용
 
 배경: 코드블록 안 ASCII 다이어그램(박스 드로잉)이 한글 혼용 시 일그러져 보임. 기존 폰트 스택(`SF Mono` 우선)에 한글 글리프가 없어 한글만 비례폭 폰트(Apple SD Gothic Neo)로 폴백되고, 그 폭이 영문의 정확히 2배가 아니어서 정렬이 어긋나던 문제.

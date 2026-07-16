@@ -87,8 +87,11 @@ if(__exports != exports)module.exports = exports;return module.exports}));
 })();
 
 
-const PORT = 7474;
-const ROOT = path.resolve(process.env.HOME, 'argo');
+// 환경변수 오버라이드 가능 (기본: 7474, ~/argo)
+const PORT = parseInt(process.env.MDWATCH_PORT, 10) || 7474;
+const ROOT = process.env.MDWATCH_ROOT
+  ? path.resolve(process.env.MDWATCH_ROOT)
+  : path.resolve(process.env.HOME, 'argo');
 const LOG_FILE = path.resolve(process.env.HOME, '.mdwatch.log');
 
 // --- entrypoint modes ----------------------------------------------------
@@ -168,6 +171,7 @@ function diffLines(oldContent, newContent) {
 // 마크다운 렌더링 (data-line 속성 포함) — marked v15 API
 let _mermaidMap = {};
 let _chartMap = {};  // marker → {spec, id, line}
+let _mathMap = {};   // marker → {tex, line}
 let _firstPara = true;
 
 marked.use({
@@ -184,7 +188,12 @@ marked.use({
       }
       if (token.text in _chartMap) {
         const c = _chartMap[token.text];
-        return `<div data-line="${c.line}" class="echarts-chart" data-chart-id="${c.id}"></div>\n`;
+        // spec을 data 속성에 내장 → SSE 부분 갱신 후에도 재초기화 가능
+        return `<div data-line="${c.line}" class="echarts-chart" data-chart-id="${c.id}" data-spec="${encodeURIComponent(c.spec)}"></div>\n`;
+      }
+      if (token.text in _mathMap) {
+        const m = _mathMap[token.text];
+        return `<div data-line="${m.line}" class="math-block" data-tex="${encodeURIComponent(m.tex)}"></div>\n`;
       }
       const isFirst = _firstPara;
       _firstPara = false;
@@ -195,7 +204,10 @@ marked.use({
     code(token) {
       const l = token._line || '';
       const escaped = token.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      return `<pre data-line="${l}"><code>${escaped}</code></pre>\n`;
+      // 언어가 명시된 펜스만 highlight.js 대상 클래스 부여
+      // (언어 없는 블록은 auto-detect 하지 않음 — ASCII 다이어그램 오염 방지)
+      const langCls = token.lang ? ` class="language-${token.lang.replace(/[^\w+-]/g, '')}"` : '';
+      return `<pre data-line="${l}"><code${langCls}>${escaped}</code></pre>\n`;
     },
     blockquote(token) {
       const l = token._line || '';
@@ -284,9 +296,22 @@ function inlineSvgRefs(mdContent, mdFilePath) {
 function renderContent(mdContent) {
   _mermaidMap = {};
   _chartMap = {};
+  _mathMap = {};
   _firstPara = true;
 
   mdContent = processEmbeds(mdContent).flattened;
+
+  // KaTeX 블록 수식: ```math 펜스 또는 단독 줄 $$...$$ → 마커 치환
+  // (인라인 $...$ 는 미지원 — "$12K" 같은 금액 표기와 충돌 방지)
+  const extractMath = (match, tex, offset, src) => {
+    const startLine = src.slice(0, offset).split('\n').length;
+    const key = `MATHBLOCK${startLine}_${Object.keys(_mathMap).length}`;
+    _mathMap[key] = { tex: tex.trim(), line: startLine };
+    const origNewlines = (match.match(/\n/g) || []).length;
+    return key + '\n'.repeat(origNewlines);
+  };
+  mdContent = mdContent.replace(/```math\n([\s\S]*?)\n```/g, extractMath);
+  mdContent = mdContent.replace(/^\$\$[ \t]*\n([\s\S]*?)\n[ \t]*\$\$[ \t]*$/gm, extractMath);
 
   // ECharts 차트 펜스: ```chart:echarts ... ``` → 마커 치환, spec 수집
   mdContent = mdContent.replace(/```chart:echarts\n([\s\S]*?)\n```/g, (match, spec, offset) => {
@@ -332,7 +357,7 @@ function buildHTML(mdContent, filePath) {
     : filePath.replace(process.env.HOME, '~');
   const embedMeta = processEmbeds(mdContent);
   const chartCount = Object.keys(_chartMap).length;
-  const chartSpecs = Object.values(_chartMap).map(c => c.spec);
+  const mathCount = Object.keys(_mathMap).length;
   const svgRefCount = countSvgRefs(mdContent);
   const hasShareable = embedMeta.hasEmbeds || chartCount > 0 || svgRefCount > 0;
 
@@ -343,7 +368,11 @@ function buildHTML(mdContent, filePath) {
 <title>${path.basename(filePath)}</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+<link id="hljs-light" rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github.min.css"${dark ? ' disabled' : ''}>
+<link id="hljs-dark" rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css"${dark ? '' : ' disabled'}>
 ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" onload="window._echartsReady=true;window.dispatchEvent(new Event(\'echarts-ready\'))" onerror="console.error(\'ECharts CDN load failed\')"></script>' : ''}
+${mathCount > 0 ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">\n<script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>' : ''}
 <style>
   :root {
     --bg: #ffffff; --fg: #1a1a1a; --code-bg: #f5f5f5; --border: #e0e0e0;
@@ -369,6 +398,9 @@ ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/ech
   code { background:var(--code-bg); padding:0.15em 0.4em; border-radius:3px; font-family:'D2Coding','Nanum Gothic Coding','SF Mono','Fira Code',monospace; font-size:0.9em; }
   pre { background:var(--code-bg); padding:1em; border-radius:6px; overflow-x:auto; margin:1em 0; line-height:1.25; }
   pre code { background:none; padding:0; }
+  pre code.hljs { background:none; padding:0; font-family:'D2Coding','Nanum Gothic Coding','SF Mono','Fira Code',monospace; }
+  .math-block { margin:1em 0; overflow-x:auto; }
+  .math-block .katex-display { margin:0; }
   blockquote { border-left:4px solid var(--muted); padding-left:1em; color:var(--muted); margin:1em 0; }
   blockquote[data-line]::before { display:none; }
   blockquote [data-line]::before { left: -72px; }
@@ -390,6 +422,34 @@ ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/ech
     opacity: 0.6;
   }
   #theme-toggle:hover { opacity: 1; }
+
+  /* 목차(TOC) 토글 버튼 + 패널 */
+  #toc-toggle {
+    position: fixed; top: 46px; right: 18px; z-index: 999;
+    background: none; border: 1px solid var(--border); border-radius: 6px;
+    color: var(--fg); cursor: pointer; font-size: 0.8rem; padding: 4px 10px;
+    opacity: 0.6;
+  }
+  #toc-toggle:hover { opacity: 1; }
+  #toc-panel {
+    position: fixed; top: 78px; right: 18px; z-index: 998;
+    width: 260px; max-height: calc(100vh - 100px); overflow-y: auto;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 6px; font-size: 0.82rem; line-height: 1.5;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+  #toc-panel.hidden { display: none; }
+  #toc-panel a {
+    display: block; color: var(--muted); text-decoration: none;
+    padding: 2px 8px; border-radius: 4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #toc-panel a:hover { color: var(--fg); background: var(--code-bg); }
+  #toc-panel a.toc-active { color: var(--link); font-weight: 600; }
+  #toc-panel a.toc-d2 { padding-left: 20px; }
+  #toc-panel a.toc-d3 { padding-left: 32px; font-size: 0.78rem; }
+  #toc-panel a.toc-d4 { padding-left: 44px; font-size: 0.78rem; }
+  @media (max-width: 1100px) { #toc-panel { display: none; } #toc-toggle { display: none; } }
 
   /* 공유용 변환 버튼 (embed 마커 있는 파일에서만 표시) */
   #share-btn {
@@ -447,6 +507,8 @@ ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/ech
 <div id="file-path" title="${filePath}">${displayPath}</div>
 ${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[embedMeta.count > 0 ? embedMeta.count + '개 임베드' : '', chartCount > 0 ? chartCount + '개 차트' : '', svgRefCount > 0 ? svgRefCount + '개 SVG' : ''].filter(Boolean).join(' + ')} 처리 후 단일 .md 다운로드">📤 공유용</button>` : ''}
 <button id="theme-toggle" onclick="toggleTheme()">☀ 라이트</button>
+<button id="toc-toggle" onclick="toggleToc()">☰ 목차</button>
+<nav id="toc-panel" class="hidden"></nav>
 <div id="md-content">${body}</div>
 <script>
   function applyTheme(theme) {
@@ -454,8 +516,16 @@ ${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[emb
     const btn = document.getElementById('theme-toggle');
     btn.textContent = theme === 'dark' ? '☀ 라이트' : '🌙 다크';
     localStorage.setItem('mdwatch-theme', theme);
+    // highlight.js 스타일시트 스왑
+    const hl = document.getElementById('hljs-light'), hd = document.getElementById('hljs-dark');
+    if (hl && hd) { hl.disabled = theme === 'dark'; hd.disabled = theme !== 'dark'; }
     mermaid.initialize({ startOnLoad: false, theme: theme === 'dark' ? 'dark' : 'default' });
     mermaid.run();
+    // ECharts 테마 재적용 (dispose 후 재초기화)
+    document.querySelectorAll('.echarts-chart[data-inited]').forEach(div => {
+      if (window.echarts) { echarts.dispose(div); delete div.dataset.inited; }
+    });
+    initECharts();
   }
   function toggleTheme() {
     const current = document.documentElement.getAttribute('data-theme');
@@ -503,14 +573,13 @@ ${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[emb
   mermaid.run();
 
   // --- ECharts 차트 초기화 (SVG renderer 모드 — 공유용 변환 시 SVG 추출이 쉬움) ---
-  window._mdwatchChartSpecs = ${JSON.stringify(chartSpecs)};
+  // spec은 각 div의 data-spec 속성에 내장 → SSE 부분 갱신 후에도 재초기화 가능
   function initECharts() {
     if (!window.echarts) return;
     const dark = document.documentElement.getAttribute('data-theme') === 'dark';
     document.querySelectorAll('.echarts-chart').forEach(div => {
       if (div.dataset.inited) return;
-      const id = parseInt(div.dataset.chartId);
-      const specStr = window._mdwatchChartSpecs[id];
+      const specStr = div.dataset.spec ? decodeURIComponent(div.dataset.spec) : null;
       if (!specStr) return;
       try {
         const spec = JSON.parse(specStr);
@@ -541,6 +610,74 @@ ${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[emb
     // (4) 마지막 보루: 페이지 완전 로드 시점
     window.addEventListener('load', initECharts);
   }
+
+  // --- 코드 syntax highlighting (언어 명시 펜스만 — 다이어그램 오염 방지) ---
+  function highlightCode() {
+    if (!window.hljs) return;
+    document.querySelectorAll('#md-content pre code[class*="language-"]').forEach(el => {
+      if (el.dataset.highlighted) return;
+      try { hljs.highlightElement(el); } catch {}
+    });
+  }
+
+  // --- KaTeX 블록 수식 렌더링 ($$...$$ / \`\`\`math 펜스) ---
+  function renderMath() {
+    if (!window.katex) return;
+    document.querySelectorAll('#md-content .math-block:not([data-mathed])').forEach(div => {
+      try {
+        katex.render(decodeURIComponent(div.dataset.tex), div, { displayMode: true, throwOnError: false });
+        div.dataset.mathed = '1';
+      } catch (e) {
+        div.innerHTML = '<pre style="color:#c0392b;">수식 렌더링 실패: ' + e.message + '</pre>';
+      }
+    });
+  }
+
+  // --- 목차(TOC) 패널 ---
+  let _tocObserver = null;
+  function buildTOC() {
+    const panel = document.getElementById('toc-panel');
+    const headings = Array.from(document.querySelectorAll('#md-content h1, #md-content h2, #md-content h3, #md-content h4'));
+    const btn = document.getElementById('toc-toggle');
+    if (headings.length < 2) { panel.classList.add('hidden'); btn.style.display = 'none'; return; }
+    btn.style.display = '';
+    panel.innerHTML = '';
+    headings.forEach((h, i) => {
+      h.dataset.tocIdx = i;
+      const a = document.createElement('a');
+      a.href = 'javascript:void(0)';
+      a.textContent = h.textContent;
+      a.title = h.textContent;
+      a.className = 'toc-d' + h.tagName[1];
+      a.dataset.tocIdx = i;
+      a.onclick = () => h.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      panel.appendChild(a);
+    });
+    // scroll-spy: 화면 상단에 가장 가까운 헤딩 강조
+    if (_tocObserver) _tocObserver.disconnect();
+    _tocObserver = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (en.isIntersecting) {
+          panel.querySelectorAll('.toc-active').forEach(el => el.classList.remove('toc-active'));
+          const a = panel.querySelector('a[data-toc-idx="' + en.target.dataset.tocIdx + '"]');
+          if (a) a.classList.add('toc-active');
+        }
+      });
+    }, { rootMargin: '0px 0px -80% 0px' });
+    headings.forEach(h => _tocObserver.observe(h));
+    // 저장된 표시 상태 복원
+    if (localStorage.getItem('mdwatch-toc') === 'open') panel.classList.remove('hidden');
+  }
+  function toggleToc() {
+    const panel = document.getElementById('toc-panel');
+    panel.classList.toggle('hidden');
+    localStorage.setItem('mdwatch-toc', panel.classList.contains('hidden') ? 'closed' : 'open');
+  }
+
+  // 초기 로드 시 실행
+  highlightCode();
+  renderMath();
+  buildTOC();
 
   // --- 우상단 toast 피드백 ---
   function mdToast(msg, kind) {
@@ -589,6 +726,12 @@ ${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[emb
 
     // mermaid 다이어그램 재렌더링
     await mermaid.run();
+
+    // syntax highlighting / 수식 / 차트 / TOC 재적용 (innerHTML 교체로 초기화됨)
+    highlightCode();
+    renderMath();
+    initECharts();
+    buildTOC();
 
     // 콘텐츠 교체 후 저장된 마커 복원
     applyMarkedLines();
@@ -861,11 +1004,16 @@ function startServer(onListen) {
 
 // 같은 URL이 이미 열려 있으면 해당 탭으로 focus, 없으면 새 탭으로 open
 const BROWSER_MAP = {
-  'com.vivaldi.vivaldi':    { name: 'Vivaldi',         kind: 'chromium' },
-  'com.google.chrome':      { name: 'Google Chrome',   kind: 'chromium' },
-  'com.brave.browser':      { name: 'Brave Browser',   kind: 'chromium' },
-  'com.microsoft.edgemac':  { name: 'Microsoft Edge',  kind: 'chromium' },
-  'com.apple.safari':       { name: 'Safari',          kind: 'safari'   },
+  'com.vivaldi.vivaldi':          { name: 'Vivaldi',         kind: 'chromium' },
+  'com.google.chrome':            { name: 'Google Chrome',   kind: 'chromium' },
+  'com.brave.browser':            { name: 'Brave Browser',   kind: 'chromium' },
+  'com.microsoft.edgemac':        { name: 'Microsoft Edge',  kind: 'chromium' },
+  'company.thebrowser.browser':   { name: 'Arc',             kind: 'chromium' },
+  'com.naver.whale':              { name: 'Whale',           kind: 'chromium' },
+  'org.chromium.chromium':        { name: 'Chromium',        kind: 'chromium' },
+  'com.operasoftware.opera':      { name: 'Opera',           kind: 'chromium' },
+  'com.apple.safari':             { name: 'Safari',          kind: 'safari'   },
+  // Firefox: AppleScript dictionary가 탭 URL 조회를 지원하지 않아 focus 불가 → fallback `open`
 };
 
 function detectDefaultBrowser() {

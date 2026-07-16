@@ -67,47 +67,39 @@ osacompile -o /Applications/mdwatch.app/Contents/Resources/Scripts/main.scpt src
 codesign --force --sign - /Applications/mdwatch.app
 ```
 
-### 2. 코드 syntax highlighting 추가
+### 2. 코드 syntax highlighting — 구현됨 (2026-07-16)
 
-`buildHTML` 안의 `<script>` 영역에 highlight.js CDN 추가 + `code` renderer 수정:
+- `code` renderer가 언어 명시 펜스에만 `language-*` 클래스 부여 (언어 없는 블록은 auto-detect 하지 않음 — ASCII 다이어그램 오염 방지)
+- highlight.js@11 CDN + `github.min.css`/`github-dark.min.css` 두 스타일시트를 `disabled` 토글로 스왑 (`applyTheme`)
+- SSE 갱신 후 `highlightCode()` 재실행
 
-```js
-// marked.use({renderer: {code(token) {...}}}) 안
-return `<pre data-line="${l}"><code class="language-${token.lang || 'plaintext'}">${escaped}</code></pre>\n`;
+### 3. KaTeX 수식 지원 — 구현됨 (2026-07-16, 블록 수식만)
 
-// buildHTML 안 <head>:
-<script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js"></script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css">
+- 단독 줄 `$$...$$` 또는 ` ```math ` 펜스를 mermaid와 같은 마커 치환 방식으로 추출 → `.math-block[data-tex]` div → 클라이언트에서 `katex.render()`
+- **인라인 `$...$`는 의도적으로 미지원**: "$12K 차지백" 같은 금액 표기가 수식으로 오탐되는 문제 + marked의 `_`/`*` 강조 변환과 충돌하기 때문. 마커 치환 방식이라 marked 간섭도 원천 차단됨
+- KaTeX CDN은 문서에 수식이 있을 때만 로드 (`mathCount > 0`)
+
+### 4. 목차(TOC) 자동 생성 — 구현됨 (2026-07-16)
+
+- 클라이언트 측에서 `#md-content`의 h1-h4 수집 → 우상단 "☰ 목차" 접이식 패널 (서버 측 생성이 아니므로 `__content` 부분 갱신과 자연 호환)
+- IntersectionObserver scroll-spy로 현재 섹션 강조, 표시 상태는 `localStorage.mdwatch-toc`
+- 헤딩 2개 미만 문서는 버튼 자동 숨김. 1100px 미만 화면에서는 미표시
+
+### 5. 포트 변경 — 환경변수 지원 (2026-07-16)
+
+```bash
+MDWATCH_PORT=8080 mdwatch file.md
 ```
 
-다크 테마 대응을 위해 `github.css` / `github-dark.css` 동적 swap이 필요합니다.
+기본 7474. 기존 브라우저 북마크가 깨지므로 신중하게.
 
-### 3. KaTeX 수식 지원
+### 6. ROOT 디렉토리 변경 — 환경변수 지원 (2026-07-16)
 
-`marked.use({extensions: [...]})`로 `$...$`, `$$...$$` 토크나이저 추가. 또는 KaTeX 자동 렌더링 (`renderMathInElement`)을 SSE 갱신 후 호출.
-
-### 4. 목차(TOC) 자동 생성
-
-`heading` renderer에서 슬러그 + 레벨 수집 → buildHTML 시 좌측 사이드바 출력. CSS grid로 본문/TOC 2열 레이아웃.
-
-### 5. 포트 변경
-
-```js
-const PORT = 7474;  // ← 여기
+```bash
+MDWATCH_ROOT=~/work mdwatch file.md
 ```
 
-기존 브라우저 북마크가 깨지므로 신중하게.
-
-### 6. ROOT 디렉토리 변경
-
-```js
-const ROOT = path.resolve(process.env.HOME, 'argo');  // ← 여기
-```
-
-또는 환경변수로 받기:
-```js
-const ROOT = process.env.MDWATCH_ROOT || path.resolve(process.env.HOME, 'argo');
-```
+기본 `~/argo`. daemon이 이미 떠 있으면 재시작해야 반영됩니다 (`lsof -ti:7474 | xargs kill`).
 
 ### 7. 여러 루트 지원
 
@@ -116,6 +108,8 @@ URL 구조를 `/:root/path` 형태로 변경 필요. `urlToFile` / `fileToUrl` �
 ### 8. 부분 업데이트 최적화
 
 현재 `__content` 엔드포인트는 **전체 HTML body**를 다시 보내고 클라이언트가 `innerHTML` 통째로 교체합니다. 큰 문서에서는 변경된 블록만 patch 하는 방식이 더 효율적입니다. 다만 mermaid 재실행 / 스타일 일관성 / DOM diff 등의 복잡성이 추가됩니다.
+
+참고 (2026-07-16): innerHTML 교체 후 highlight.js·KaTeX·ECharts·TOC를 재적용하도록 수정됨. ECharts spec은 페이지 전역 변수가 아니라 각 div의 `data-spec` 속성에 내장되어, 부분 갱신 후에도 차트가 유지된다 (이전에는 SSE 갱신 시 차트가 사라지는 버그 있었음).
 
 ## 디버깅 팁
 
