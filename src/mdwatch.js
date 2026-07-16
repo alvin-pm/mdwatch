@@ -342,6 +342,7 @@ function buildHTML(mdContent, filePath) {
 <meta charset="utf-8">
 <title>${path.basename(filePath)}</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic+Coding&display=swap" rel="stylesheet">
 ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" onload="window._echartsReady=true;window.dispatchEvent(new Event(\'echarts-ready\'))" onerror="console.error(\'ECharts CDN load failed\')"></script>' : ''}
 <style>
   :root {
@@ -363,8 +364,10 @@ ${chartCount > 0 ? '<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/ech
   p { margin:0; }
   p.para-start { margin-top:1em; }
   a { color:var(--link); }
-  code { background:var(--code-bg); padding:0.15em 0.4em; border-radius:3px; font-family:'SF Mono','Fira Code',monospace; font-size:0.9em; }
-  pre { background:var(--code-bg); padding:1em; border-radius:6px; overflow-x:auto; margin:1em 0; }
+  /* D2Coding: 한글 폭이 영문의 정확히 2배인 코딩 폰트 — ASCII 다이어그램 정렬 보장.
+     미설치 환경은 Nanum Gothic Coding(웹폰트)으로 폴백 */
+  code { background:var(--code-bg); padding:0.15em 0.4em; border-radius:3px; font-family:'D2Coding','Nanum Gothic Coding','SF Mono','Fira Code',monospace; font-size:0.9em; }
+  pre { background:var(--code-bg); padding:1em; border-radius:6px; overflow-x:auto; margin:1em 0; line-height:1.25; }
   pre code { background:none; padding:0; }
   blockquote { border-left:4px solid var(--muted); padding-left:1em; color:var(--muted); margin:1em 0; }
   blockquote[data-line]::before { display:none; }

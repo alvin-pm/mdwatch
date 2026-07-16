@@ -2,6 +2,17 @@
 
 날짜는 작업 완료 시점 기준입니다.
 
+## 2026-07-16 — 코드블록 한글 고정폭 폰트 적용
+
+배경: 코드블록 안 ASCII 다이어그램(박스 드로잉)이 한글 혼용 시 일그러져 보임. 기존 폰트 스택(`SF Mono` 우선)에 한글 글리프가 없어 한글만 비례폭 폰트(Apple SD Gothic Neo)로 폴백되고, 그 폭이 영문의 정확히 2배가 아니어서 정렬이 어긋나던 문제.
+
+주요 변경:
+
+1. **`code` 폰트 스택 변경**: `'D2Coding','Nanum Gothic Coding','SF Mono','Fira Code',monospace`
+   - D2Coding·Nanum Gothic Coding은 한글 폭 = 영문 폭 × 2가 보장되는 한글 코딩 폰트.
+2. **웹폰트 폴백 추가**: D2Coding 미설치 환경 대비 Google Fonts `Nanum Gothic Coding` `<link>` 추가 (팀 배포 대비).
+3. **`pre` line-height 1.5 고정**: 박스 세로선(│) 간 시각적 간격 완화 (본문 1.7 상속 대신).
+
 ## 2026-06-05 — daemon화 + URL 단위 즐겨찾기 + 탭 focus
 
 배경: 같은 파일을 열어도 매번 새 탭으로 열리고, URL이 항상 동일해서 브라우저 즐겨찾기 사용이 어려웠음.
