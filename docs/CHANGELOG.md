@@ -11,7 +11,7 @@
 1. **`code` 폰트 스택 변경**: `'D2Coding','Nanum Gothic Coding','SF Mono','Fira Code',monospace`
    - D2Coding·Nanum Gothic Coding은 한글 폭 = 영문 폭 × 2가 보장되는 한글 코딩 폰트.
 2. **웹폰트 폴백 추가**: D2Coding 미설치 환경 대비 Google Fonts `Nanum Gothic Coding` `<link>` 추가 (팀 배포 대비).
-3. **`pre` line-height 1.5 고정**: 박스 세로선(│) 간 시각적 간격 완화 (본문 1.7 상속 대신).
+3. **`pre` line-height 1.25 고정**: 박스 세로선 간 시각적 간격 완화 (본문 1.7 상속 대신, 1.5로 넣었다가 1.25로 추가 축소).
 
 ## 2026-06-05 — daemon화 + URL 단위 즐겨찾기 + 탭 focus
 
