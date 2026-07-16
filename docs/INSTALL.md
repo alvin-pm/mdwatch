@@ -6,6 +6,7 @@
 
 - macOS 12 이상
 - Node.js 16 이상 (없으면 인스톨 스크립트가 자동으로 Homebrew + Node 설치)
+- (권장) D2Coding 폰트 — 코드블록 안 ASCII 다이어그램 정렬용, 아래 [4-(4)](#4-d2coding-폰트-설치-권장) 참조
 
 ## 2. Node.js 설치 (Homebrew 없는 환경)
 
@@ -87,6 +88,19 @@ Finder 더블클릭으로 열리게 하려면:
 Warp 내장 MD 뷰어를 끄지 않으면 `.md` 클릭이 Warp에서 처리됩니다.
 
 **Warp Settings → Features → "Open Markdown files in Warp's Markdown viewer" → OFF**
+
+### (4) D2Coding 폰트 설치 (권장)
+
+코드블록의 폰트 스택이 `D2Coding` 우선입니다. 한글 폭이 영문의 **정확히 2배**로 설계된 폰트라, 코드블록 안 ASCII 다이어그램(박스/화살표)이 한글 혼용 시에도 일그러지지 않습니다.
+
+```bash
+brew install --cask font-d2coding
+```
+
+또는 [naver/d2codingfont](https://github.com/naver/d2codingfont) 릴리스에서 다운로드 후 더블클릭 설치.
+
+- 미설치 시 Google Fonts의 `Nanum Gothic Coding` 웹폰트로 자동 폴백되므로 동작에는 문제 없습니다 (오프라인 환경이면 일반 고정폭 폰트로 폴백 → 한글 다이어그램 정렬이 어긋날 수 있음).
+- 참고: 다이어그램을 작성하는 쪽에서도 박스 문자(`┌─│`)·화살표(`→`)·원문자(`①`) 같은 **모호폭(East Asian Ambiguous) 문자를 피하고 ASCII(`+ - | >`)+한글만 쓰는 것**이 안전합니다. 모호폭 문자는 폰트와 무관하게 렌더러마다 1칸/2칸이 달라질 수 있습니다.
 
 ### (4) 브라우저 자동화 권한 (첫 사용 시)
 
