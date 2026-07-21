@@ -46,9 +46,11 @@ flowchart TB
 
 핵심 함수:
 - `urlToFile(reqUrl)` / `fileToUrl(absPath)` — URL ↔ 절대경로 양방향 매핑, traversal 방어
-- `renderContent(md)` — marked로 HTML 변환 + 각 블록에 `data-line` 주입 + mermaid 블록 보존
+- `renderContent(md)` — marked로 HTML 변환 + 각 블록에 `data-line`(원본 줄번호) 주입 + mermaid 블록 보존
 - `attachClient(absPath, res)` / `detachClient(absPath, res)` — 파일별 SSE 클라이언트 + watcher 관리 (refcount)
 - `diffLines(old, new)` — 앞/뒤 동일 부분 제외한 변경 줄 구간 계산
+- `sliceLines(content, start, end)` / `relocateAndReplace(content, base, new, hint)` — 인라인 편집: 블록 원본 슬라이스, 내용 기반 재탐색 치환
+- `hasEmbeds` / `isEditableFile` — 인라인 편집 가드(embed 파일·비마크다운 제외)
 
 ### 2. main.applescript (mdwatch.app 안의 컴파일된 AppleScript)
 
@@ -129,6 +131,23 @@ sequenceDiagram
   V->>V: 3초 후 fade-out → 영구 marker
 ```
 
+### 인라인 블록 편집 (저장 흐름)
+
+편집은 **별도 렌더 경로를 만들지 않고 기존 watch→SSE 루프를 재사용**한다. 블록 저장이 파일을 쓰면, 그 write가 `fs.watch`를 발화시켜 위의 "자동 리프레시" 시퀀스가 그대로 돌며 편집된 블록이 재렌더+하이라이트된다.
+
+```
+① 블록 더블클릭 → 클라이언트가 [start,end] 계산(data-line + 다음 블록 data-line-1)
+② GET /__source?file=&start=&end= → 블록 원본 소스 슬라이스(baseText)를 textarea에 표시
+③ 저장 → POST /__edit {file, start, end, baseText, newText}
+④ 서버: 현재 파일에서 baseText를 줄 경계 매치로 재탐색(relocateAndReplace)
+     · 있으면 그 자리 치환 → fs.writeFileSync   (줄 밀림 자동 흡수)
+     · 없으면 409 conflict + 현재 블록 텍스트
+⑤ write → (기존) fs.watch → diffLines → SSE → /__content 재렌더 + 변경 하이라이트
+```
+
+- 클라이언트는 편집 중 들어온 SSE 리로드를 **큐잉**했다가 편집기를 닫을 때 적용(열린 편집기 보존). 편집 내용은 시작 시점부터 localStorage 초안으로도 보존.
+- 신규 엔드포인트: `GET /__source`(소스 슬라이스), `POST /__edit`(저장). 둘 다 `.md`/`.markdown` 한정, daemon `127.0.0.1` 로컬 전용.
+
 ## TCC (macOS Automation) 권한 모델
 
 mdwatch 체인:
@@ -175,3 +194,6 @@ tccutil reset AppleEvents local.mdwatch
 | daemon 자동 fork | 사용자가 별도로 데몬 관리할 필요 없음 |
 | AppleScript focus는 mdwatch.app 내부 | TCC 권한 chain을 mdwatch.app 단위로 단순화 |
 | 부분 업데이트 (SSE) | 전체 새로고침이면 스크롤 위치/테마/마커 상태 모두 리셋 |
+| 편집: 줄번호 splice가 아닌 **내용 기반 재탐색** | AI가 다른 곳을 고쳐 줄이 밀려도 자동 적용, 그 블록 자체가 바뀐 경우에만 충돌 감지. 전체 재직렬화가 없어 git diff가 국소적으로 유지됨 |
+| 편집: 쓰기 경로가 **watch→SSE 루프 재사용** | 별도 렌더 경로 불필요, 편집 결과가 "변경 하이라이트"로 자연 표시 |
+| 편집: 편집 중 SSE **큐잉** | innerHTML 교체가 열린 편집기를 지우지 않게(에코 방지). 초안은 localStorage로도 보존 |
