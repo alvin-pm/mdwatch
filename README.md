@@ -32,20 +32,9 @@ Markdown은 **AI가 가장 싸게 쓰는 포맷**입니다. mdwatch는 그 markd
 - **다크/라이트 테마** — 시스템 설정 자동 감지(macOS) + 수동 토글.
 - **이미지·정적 파일 서빙** — svg/img/css/js/pdf 등을 올바른 MIME으로 함께 서빙, 공유 변환 시 외부 svg 자동 인라인.
 
-## 타 md 뷰어와의 차별점
+## 왜 "또 하나의 md 뷰어"가 아닌가
 
-live reload 계열 공개 도구는 여럿 있지만, **저장 시점의 변경 줄 하이라이트 + 블록 인라인 편집을 한 스탠드얼론 뷰어로 묶은 조합은 드뭅니다** (2026-07 조사 기준). 대부분은 "미리보기"에 그치고, 편집은 별도 에디터로 넘어가야 합니다.
-
-| | 실시간 반영 | 변경 줄 하이라이트 | Mermaid | 차트(ECharts) | 비고 |
-|---|---|---|---|---|---|
-| **mdwatch** | O (SSE 부분 갱신) | **O** (저장 시 diff → fade → 영구 마커) | O | O (펜스) | daemon·URL 즐겨찾기·탭 focus·한글 정렬·하이라이팅·KaTeX·TOC |
-| [markserv](https://github.com/markserv/markserv) | O | X | X | X | Node, 2014년부터 유지, KaTeX |
-| [grip](https://github.com/joeyespo/grip) | O (새로고침) | X | X | X | GitHub API 렌더링 — 인터넷 필수·시간당 60회 제한, 2023년 이후 방치 |
-| [mdr](https://github.com/clevercloud/mdr) | O | X | O | X | Rust 단일 바이너리, 경량 |
-| [Markdown Viewer (Chrome 확장)](https://chromewebstore.google.com/detail/markdown-viewer/ckkdlimhmcjmikdlpkmbgfkaikojcbjk) | O (자동 새로고침) | X | O | X | 서버 불필요, MathJax |
-| VS Code 프리뷰 (+확장) | O | 부분적 — [Markdown Diff Preview](https://open-vsx.org/extension/batlounis/markdown-diff-preview)가 git diff 기준 하이라이트 | 확장 필요 | 확장 필요 (MPE 등) | 에디터 종속 |
-
-mdwatch의 변경 하이라이트는 git 상태가 아니라 **저장 순간의 diff** 기준이라, 커밋 여부와 무관하게 "방금 뭐가 바뀌었는지"를 따라갈 수 있습니다. AI 에이전트가 문서를 수정하는 동안 브라우저로 지켜보는 워크플로우에 특히 유용합니다.
+md 라이브 프리뷰 도구는 이미 많습니다. mdwatch의 자리는 "예쁘게 보여주기"가 아니라 **AI-authoring 루프**입니다 — 외부 프로세스(AI 에이전트 등)가 파일을 고치는 동안 **저장 순간의 diff를 따라보고**(git 커밋 여부와 무관), **그 자리에서 블록을 인라인 수정**하는 것. 대부분의 프리뷰어는 "미리보기"에 그치고 편집은 별도 에디터로 넘어가야 하는데, 이 **관전 + 국소 편집** 조합을 한 스탠드얼론 도구로 묶은 경우는 드뭅니다.
 
 ## 설치 · 실행
 
