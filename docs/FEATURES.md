@@ -112,7 +112,7 @@
 
 ## 알려진 제약
 
-- macOS 전용 (`defaults`, `osascript`, `open` 의존)
+- **macOS 검증 / 그 외 무보장** — 코어(Node HTTP+SSE+렌더)는 크로스플랫폼이나, 탭 focus(AppleScript)·시스템 테마 감지(`defaults`)는 macOS 전용. Linux/Windows는 `mdwatch <file>` CLI로 브라우저 새 탭 open까지 best-effort 동작(focus·테마 자동감지 없음). Finder 통합은 macOS만.
 - 단일 사용자 (포트는 `MDWATCH_PORT` 환경변수로 변경 가능하나 daemon당 1개)
 - 수식은 블록 수식만 지원 (인라인 `$...$` 미지원 — 금액 표기 오탐 방지 의도)
 - 검색 기능 없음
