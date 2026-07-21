@@ -1022,6 +1022,21 @@ function isServerRunning() {
 // watchers: Map<absPath, { watcher: FSWatcher, prevContent: string, clients: Set<res> }>
 const watchers = new Map();
 
+// 파일 변경 감시. 파일을 직접 fs.watch 하면 원자적 저장(temp에 쓰고 → rename으로 교체)에서
+// 원래 inode가 갈려 이벤트가 끊긴다(에디터·AI 에이전트가 흔히 쓰는 저장 방식) → "저장했는데
+// 자동 갱신이 안 됨" 증상. 그래서 **부모 디렉토리를 watch 하고 basename으로 필터**한다.
+// 디렉토리 inode는 rename에도 안정적이라 원자적 저장을 놓치지 않는다.
+function createFileWatcher(absPath, onChange) {
+  const dir = path.dirname(absPath);
+  const base = path.basename(absPath).normalize('NFC');
+  return fs.watch(dir, (eventType, filename) => {
+    // filename은 일부 플랫폼에서 null일 수 있음 → 그 경우는 통과시켜 재확인(diff가 []면 무해).
+    // macOS는 NFD로 파일명을 줄 수 있어 정규화 후 비교(한글 파일명 대응).
+    if (filename && filename.normalize('NFC') !== base) return;
+    onChange();
+  });
+}
+
 function attachClient(absPath, res) {
   let entry = watchers.get(absPath);
   if (!entry) {
@@ -1029,12 +1044,13 @@ function attachClient(absPath, res) {
     try { prevContent = fs.readFileSync(absPath, 'utf8'); } catch {}
     const clients = new Set();
     let debounce;
-    const watcher = fs.watch(absPath, () => {
+    const watcher = createFileWatcher(absPath, () => {
       clearTimeout(debounce);
       debounce = setTimeout(() => {
         let newContent = '';
         try { newContent = fs.readFileSync(absPath, 'utf8'); } catch { return; }
         const changed = diffLines(entry.prevContent, newContent);
+        if (changed.length === 0) return; // 디렉토리 내 다른 변화로 온 이벤트 등 → 무해하게 무시
         entry.prevContent = newContent;
         console.log(`  [${new Date().toLocaleTimeString()}] ${path.basename(absPath)} → 줄 ${changed.join(', ')}`);
         const msg = JSON.stringify({ lines: changed });
@@ -1438,6 +1454,7 @@ module.exports = {
   isEditableFile,
   sliceLines,
   relocateAndReplace,
+  createFileWatcher,
   server,
   ROOT,
   PORT,

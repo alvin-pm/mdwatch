@@ -36,6 +36,24 @@ test('diffLines: 줄 삭제 → 삭제 위치', () => {
   assert.ok(r.length >= 1);
 });
 
+// -------------------------------------------------- createFileWatcher (원자적 저장)
+// 회귀 방지: 파일을 직접 fs.watch 하면 temp→rename 저장에서 이벤트가 끊긴다.
+// 디렉토리 watch + basename 필터라 rename에도 감지돼야 한다.
+test('createFileWatcher: 원자적 저장(temp→rename)에도 변경 감지', async () => {
+  const p = tmpMd('v1\n');
+  let fired = 0;
+  const w = mdw.createFileWatcher(p, () => { fired++; });
+  await new Promise(r => setTimeout(r, 60)); // watcher 준비 대기
+  // 원자적 저장 시뮬레이션: 임시파일에 쓰고 원본 위로 rename
+  const tmp = p + '.tmp';
+  fs.writeFileSync(tmp, 'v2\n');
+  fs.renameSync(tmp, p);
+  // 이벤트 도착까지 최대 ~1s 폴링
+  for (let i = 0; i < 40 && fired === 0; i++) await new Promise(r => setTimeout(r, 25));
+  w.close();
+  assert.ok(fired >= 1, '원자적 저장(rename) 후 변경이 감지되어야 함');
+});
+
 // -------------------------------------------------------- fileToUrl/urlToFile
 test('fileToUrl/urlToFile: ROOT 내부 파일 왕복', () => {
   const p = tmpMd('hello\n');
