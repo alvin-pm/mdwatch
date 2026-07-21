@@ -2,6 +2,14 @@
 
 날짜는 작업 완료 시점 기준입니다.
 
+## 2026-07-21 — 버그 수정: 원자적 저장 시 자동 갱신 누락 (`fix/fs-watch-atomic-save`)
+
+**증상**: 에디터·AI 에이전트가 파일을 "임시파일에 쓰고 → rename으로 교체"하는 방식(원자적 저장)으로 저장하면, 저장했는데도 브라우저가 자동 갱신되지 않고 수동 새로고침을 해야 했음.
+
+**원인**: `fs.watch(파일경로)`로 파일을 직접 감시하면, rename으로 원래 inode가 갈릴 때 이벤트가 끊긴다(Node `fs.watch`의 알려진 한계). "AI가 문서 고치는 걸 관전"이라는 핵심 유스케이스를 직접 해치는 버그.
+
+**수정**: `createFileWatcher`를 신설해 **부모 디렉토리를 watch + basename 필터**(NFC 정규화, 한글 파일명 대응)로 전환. 디렉토리 inode는 rename에도 안정적이라 원자적 저장을 놓치지 않는다. 디렉토리 내 다른 파일 이벤트는 basename·빈 diff로 무해하게 걸러짐. 원자적 저장 회귀 테스트 추가(`test/`).
+
 ## 2026-07-21 — 인라인 블록 편집 + 자동화 테스트 (브랜치 `feat/inline-block-edit`)
 
 설계: [PROPOSAL-inline-edit.md](PROPOSAL-inline-edit.md).
