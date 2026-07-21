@@ -38,14 +38,17 @@ md 라이브 프리뷰 도구는 이미 많습니다. mdwatch의 자리는 "예�
 
 ## 설치 · 실행
 
-### 가장 빠르게 (설치 없이 — npx)
+> **비공개(private) 배포 중이라면 아래 "소스에서"** 경로를 쓰세요. `npx`·Homebrew는 저장소가 **공개(public)**여야 동작하고, Homebrew는 릴리스 태그도 필요합니다.
+> mdwatch는 **무의존성 단일 파일**이라, 내부 공유는 `src/mdwatch.js` 하나만 전달해도 됩니다(`node mdwatch.js some.md`). Finder 통합까지 원하면 `install-mdwatch.command`도 함께.
+
+### 가장 빠르게 (설치 없이 — npx · **공개 후**)
 
 ```bash
 # 저장소에서 바로 실행 (Node.js 16+ 필요). 파일 열람 루트는 MDWATCH_ROOT로 지정.
 MDWATCH_ROOT="$PWD" npx github:alvin-pm/mdwatch some_file.md
 ```
 
-### Homebrew (macOS, tap)
+### Homebrew (macOS, tap · **공개 + 릴리스 태그 후**)
 
 ```bash
 brew install alvin-pm/mdwatch/mdwatch    # tap + 설치 (준비 예정 — packaging/homebrew 참조)
@@ -87,16 +90,25 @@ mdwatch는 **로컬 개인 도구**입니다. 공개 서버가 아닙니다.
 ```
 mdwatch_source/
 ├── README.md                 # 본 문서
+├── package.json              # bin(mdwatch)·test 스크립트 (외부 의존성 0)
+├── src/                      # 배포용 소스 원본
+│   ├── mdwatch.js            # Node 서버 + CLI (단일 파일, marked 인라인 번들)
+│   ├── main.applescript      # mdwatch.app 핸들러 (Finder 더블클릭용)
+│   └── install-mdwatch.command  # 자동 설치 스크립트 (macOS)
+├── test/                     # 자동화 테스트 (node:test, 무의존성)
+│   └── mdwatch.test.js
 ├── docs/                     # 설계·개발·운영 문서
 │   ├── ARCHITECTURE.md
 │   ├── FEATURES.md
-│   ├── INSTALL.md
 │   ├── DEVELOPMENT.md
-│   └── CHANGELOG.md
-└── src/                      # 배포용 소스 원본
-    ├── mdwatch.js            # Node 서버 + CLI (단일 파일, marked 인라인 번들)
-    ├── main.applescript      # mdwatch.app 핸들러 (Finder 더블클릭용)
-    └── install-mdwatch.command  # 자동 설치 스크립트
+│   ├── INSTALL.md
+│   ├── CHANGELOG.md
+│   ├── DEMO.md
+│   └── DIAGRAM-GUIDE.md
+├── packaging/homebrew/       # Homebrew 포뮬러 + 배포 절차
+│   ├── mdwatch.rb
+│   └── README.md
+└── .github/workflows/test.yml  # CI (push·PR에서 node --test)
 ```
 
 ## 실행 환경
