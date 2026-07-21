@@ -177,9 +177,21 @@ codesign --force --sign - /Applications/mdwatch.app
   -f /Applications/mdwatch.app
 ```
 
-## 테스트 체크리스트
+## 테스트
 
-수동 검증 절차 (자동화 테스트 없음):
+### 자동화 테스트 (`npm test`)
+
+`node:test`(무의존성) 기반. `test/mdwatch.test.js`:
+- 순수 로직: `diffLines`, `fileToUrl`/`urlToFile`(traversal 클램프), `hasEmbeds`, `sliceLines`, `relocateAndReplace`, `renderContent`(data-line 계약)
+- HTTP 통합: `server.listen(0)`으로 in-process 기동 → `/__ping`·`/__source`·`/__edit`(정상/충돌/embed거부/403)
+
+```bash
+npm test          # 또는 node --test test/
+```
+
+> 테스트가 함수를 `require` 할 수 있도록 `mdwatch.js`의 실행 분기는 `if (require.main === module)`로 감싸고 파일 끝에서 `module.exports` 한다. 새 순수 함수를 추가하면 export에 등록하고 케이스를 붙일 것.
+
+### 수동 검증 체크리스트 (브라우저 UI — 자동화 대상 밖)
 
 - [ ] `mdwatch ~/argo/README.md` → 새 탭 열림
 - [ ] 같은 명령 재실행 → 새 탭 안 열림 (focus)
@@ -192,3 +204,8 @@ codesign --force --sign - /Applications/mdwatch.app
 - [ ] daemon 종료 후 `mdwatch <file>` → daemon 자동 재기동
 - [ ] 동시 5개 파일 열기 → 각각 독립적으로 watch + 변경 감지
 - [ ] 탭 닫기 → 해당 파일 watcher 해제 (로그 확인 가능)
+- [ ] **블록 더블클릭 → 편집기 열림, ⌘↵ 저장 → 파일 반영 + 변경 하이라이트**
+- [ ] **편집 중 다른 세션/AI가 파일 수정 → 편집기 유지(리로드 큐잉), 닫으면 반영**
+- [ ] **편집 중인 그 블록을 외부에서 바꾼 뒤 저장 → 충돌 UI + [덮어쓰기] 동작, 편집 내용 보존**
+- [ ] **표/코드펜스 블록 편집 → 범위가 블록 전체를 정확히 덮는지**
+- [ ] **embed(`{{$…}}`) 파일 → 편집 비활성(토스트)**

@@ -89,6 +89,27 @@
 | 로그 확인 | `tail -f /tmp/mdwatch.log` (Finder 경유) / `~/.mdwatch.log` (CLI 경유 daemon spawn) |
 | 재시작 | 종료 후 `mdwatch <file>` 또는 `node ~/mdwatch/mdwatch.js __daemon__ &` |
 
+## 인라인 블록 편집
+
+| 기능 | 동작 |
+|------|------|
+| 편집 진입 | 렌더된 블록 **더블클릭** → 그 블록의 소스가 textarea로 펼쳐짐 |
+| 저장 | `저장` 버튼 또는 **⌘↵**. 블록만 국소 치환(전체 재직렬화 없음) → git diff 최소 |
+| 취소 | `취소` 또는 **Esc** |
+| 충돌 처리 | 저장 직전 파일에서 원본 블록을 재탐색. 그새 그 블록이 바뀌었으면 **현재 내용을 나란히 보여주고** [덮어쓰기] 선택. 내 편집은 절대 소실되지 않음 |
+| 줄 밀림 흡수 | AI가 다른 곳을 고쳐 블록이 밀려도 내용 기반 재탐색으로 자동 적용 |
+| 초안 보존 | 편집 시작 시점부터 `localStorage`에 초안 저장 → SSE 갱신·브라우저 크래시에도 복원 |
+| 비활성 대상 | embed(`{{$…}}`) 사용 파일, 비마크다운 파일 |
+| 엔드포인트 | `GET /__source?file=&start=&end=`, `POST /__edit` (127.0.0.1 로컬 전용) |
+
+## 테스트
+
+| 항목 | 값 |
+|------|------|
+| 실행 | `npm test` (= `node --test test/`) |
+| 프레임워크 | Node 내장 `node:test` (외부 의존성 없음) |
+| 범위 | 순수 로직(diffLines·URL 매핑·traversal 방어·sliceLines·relocateAndReplace·renderContent) + HTTP 통합(`/__ping`·`/__source`·`/__edit` happy/conflict/embed/403) |
+
 ## 알려진 제약
 
 - macOS 전용 (`defaults`, `osascript`, `open` 의존)
