@@ -2,6 +2,18 @@
 
 날짜는 작업 완료 시점 기준입니다.
 
+## 2026-07-21 — 인라인 블록 편집 + 자동화 테스트 (브랜치 `feat/inline-block-edit`)
+
+설계: [PROPOSAL-inline-edit.md](PROPOSAL-inline-edit.md).
+
+1. **인라인 블록 편집** — 렌더 화면에서 블록을 **더블클릭 → 소스 textarea 즉석 편집 → 저장**(⌘↵). 전체 재직렬화 없이 그 블록만 국소 치환해 git diff를 해치지 않는다.
+   - **내용 기반 재탐색**: 편집 시작 시점의 블록 원본을 현재 파일에서 다시 찾아 치환 → AI가 다른 곳을 고쳐 줄이 밀려도 자동 적용, 그 블록 자체가 바뀐 경우에만 충돌.
+   - **편집 내용 3중 보존**: textarea 유지 + 충돌 시 현재 내용 나란히 비교(덮어쓰기 선택) + 편집 시작 시점부터 localStorage 초안 저장(SSE 와이프·크래시 복원).
+   - **SSE 큐잉**: 편집 중 들어온 리로드는 편집기를 닫을 때 적용(열린 편집기 보존).
+   - **가드**: embed(`{{$…}}`) 파일·비마크다운은 편집 비활성. daemon은 `127.0.0.1` 바인딩(로컬 전용).
+   - 신규 엔드포인트: `GET /__source`(블록 소스 조회), `POST /__edit`(저장).
+2. **자동화 테스트 도입** (기존 0개) — `node:test` 무의존성. `npm test` → `node --test`. 순수 로직(diffLines·urlToFile traversal·relocateAndReplace 등) + HTTP 통합(`server.listen(0)`) 24케이스. 이를 위해 실행 분기를 `require.main === module` 가드로 감싸고 함수 export.
+
 ## 2026-07-16 — D2Coding 웹폰트 통일 + 다이어그램 문자셋 확장
 
 배경: 폰트 실측 결과 박스문자(`─┌│`)가 D2Coding에서는 1칸, 폴백 웹폰트(Nanum Gothic Coding)에서는 2칸으로 그려져, 같은 스택 안에서도 정렬이 갈리는 문제 확인 (`►`는 NGC에 글리프 자체가 없음).

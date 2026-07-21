@@ -108,7 +108,7 @@ const cliFile = _fileArg ? (() => {
   const abs = path.resolve(_fileArg);
   try { return fs.realpathSync(abs); } catch { return abs; }
 })() : null;
-if (_fileArg && (!cliFile || !fs.existsSync(cliFile))) {
+if (require.main === module && _fileArg && (!cliFile || !fs.existsSync(cliFile))) {
   console.error(`mdwatch: file not found — ${_fileArg}`);
   process.exit(1);
 }
@@ -166,6 +166,63 @@ function diffLines(oldContent, newContent) {
     for (let j = lo; j <= newHi; j++) result.push(j + 1); // 1-indexed
   }
   return result;
+}
+
+// --- 인라인 블록 편집 지원 (docs/PROPOSAL-inline-edit.md) ---------------
+
+// embed 사용 파일 감지: processEmbeds가 줄수를 보존하지 않아 data-line이 어긋나므로
+// 인라인 편집을 비활성화하는 가드로 쓴다.
+function hasEmbeds(content) {
+  return /^<!--\s*embeds\s*-->\s*$/m.test(content) &&
+         /\{\{\$[A-Za-z_][\w-]*\}\}/.test(content);
+}
+
+// 쓰기 가드: 마크다운 파일만 편집 허용
+function isEditableFile(absPath) {
+  const ext = path.extname(absPath).toLowerCase();
+  return ext === '.md' || ext === '.markdown';
+}
+
+// 1-indexed [start, end] 줄 범위의 원본 텍스트를 반환 (후행 빈 줄 트림).
+// 블록 범위는 클라이언트가 [data-line, 다음 블록 data-line - 1]로 주므로 후행 공백이 섞인다.
+function sliceLines(content, start, end) {
+  const lines = content.split('\n');
+  const s = Math.max(1, start | 0);
+  const e = Math.min(lines.length, end | 0);
+  if (e < s) return '';
+  const slice = lines.slice(s - 1, e);
+  while (slice.length > 1 && slice[slice.length - 1].trim() === '') slice.pop();
+  return slice.join('\n');
+}
+
+// baseText(편집 시작 시점의 블록 원본)를 현재 content에서 재탐색해 newText로 치환.
+//   - 줄 경계에 정렬된 매치만 인정 (부분 문자열 오매치 방지)
+//   - 후보가 여럿이면 hintLine(1-indexed 시작줄)에 가장 가까운 것 선택
+//   - 못 찾으면 conflict (블록 자체가 그새 바뀐 것)
+// 반환: { status: 'ok', content } | { status: 'conflict' }
+function relocateAndReplace(content, baseText, newText, hintLine) {
+  if (typeof baseText !== 'string' || baseText === '') return { status: 'conflict' };
+  const positions = [];
+  let idx = content.indexOf(baseText);
+  while (idx !== -1) {
+    const atLineStart = idx === 0 || content[idx - 1] === '\n';
+    const q = idx + baseText.length;
+    const atLineEnd = q === content.length || content[q] === '\n';
+    if (atLineStart && atLineEnd) positions.push(idx);
+    idx = content.indexOf(baseText, idx + 1);
+  }
+  if (positions.length === 0) return { status: 'conflict' };
+  let best = positions[0];
+  if (positions.length > 1 && hintLine) {
+    let bestDist = Infinity;
+    for (const p of positions) {
+      const lineOfP = content.slice(0, p).split('\n').length; // 1-indexed
+      const dist = Math.abs(lineOfP - hintLine);
+      if (dist < bestDist) { bestDist = dist; best = p; }
+    }
+  }
+  const updated = content.slice(0, best) + newText + content.slice(best + baseText.length);
+  return { status: 'ok', content: updated };
 }
 
 // 마크다운 렌더링 (data-line 속성 포함) — marked v15 API
@@ -512,6 +569,39 @@ ${mathCount > 0 ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/kat
   /* 영구 마커 */
   [data-line].marked { box-shadow: inset 2px 0 0 0 #f59e0b88; }
   [data-line].marked::before { color: var(--gutter-fg); opacity: 0.7; }
+
+  /* 인라인 블록 편집 */
+  [data-line].md-editing { display: none !important; }
+  .md-editor {
+    margin: 0.4em 0; border: 1px solid var(--link); border-radius: 6px;
+    background: var(--code-bg); padding: 8px;
+  }
+  .md-editor textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 3em;
+    background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 8px 10px; line-height: 1.5;
+    font-family: 'D2Coding','D2Coding Web','Nanum Gothic Coding','SF Mono',monospace;
+    font-size: 0.9rem;
+  }
+  .md-editor .md-editor-bar {
+    display: flex; gap: 8px; align-items: center; margin-top: 6px;
+    font-size: 0.78rem; color: var(--muted);
+  }
+  .md-editor button {
+    border: 1px solid var(--border); border-radius: 5px; cursor: pointer;
+    background: var(--bg); color: var(--fg); font-size: 0.78rem; padding: 3px 10px;
+  }
+  .md-editor button.md-save { border-color: var(--link); color: var(--link); font-weight: 600; }
+  .md-editor button:hover { background: var(--code-bg); }
+  .md-editor .md-hint { margin-left: auto; }
+  .md-editor .md-conflict {
+    margin-top: 8px; border-top: 1px dashed var(--muted); padding-top: 8px;
+    font-size: 0.8rem; color: #c0392b;
+  }
+  .md-editor .md-conflict pre {
+    margin: 4px 0 0; max-height: 220px; overflow: auto; font-size: 0.82rem;
+    background: var(--bg); border: 1px solid var(--border);
+  }
 </style>
 </head>
 <body>
@@ -727,9 +817,12 @@ ${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[emb
 
   const __filePathParam = encodeURIComponent(${JSON.stringify(filePath)});
   const es = new EventSource('/__reload?file=' + __filePathParam);
-  es.onmessage = async (e) => {
-    const { lines } = JSON.parse(e.data);
 
+  // 편집 중이면 SSE 리로드를 큐잉했다가 편집기를 닫을 때 적용 (열린 편집기 보존)
+  let __editorOpen = false;
+  let __pendingReload = null;
+
+  async function applyReload(lines) {
     // 콘텐츠만 교체 (SSE 연결 유지)
     const res = await fetch('/__content?file=' + __filePathParam);
     const html = await res.text();
@@ -797,7 +890,121 @@ ${hasShareable ? `<button id="share-btn" onclick="downloadShare()" title="${[emb
         saveMarkedLines(newMarkedLines);
       }, 1500);
     }, 3000);
+  }
+
+  es.onmessage = (e) => {
+    const { lines } = JSON.parse(e.data);
+    if (__editorOpen) { __pendingReload = lines || []; return; }  // 편집 중이면 큐잉
+    applyReload(lines);
   };
+
+  // --- 인라인 블록 편집 (더블클릭 → 블록 소스 편집) ---------------------
+  function draftKey(start) { return 'mdwatch-draft:' + __filePathParam + ':' + start; }
+  function saveDraft(start, base, text) {
+    try { localStorage.setItem(draftKey(start), JSON.stringify({ base, text, ts: Date.now() })); } catch (e) {}
+  }
+  function readDraft(start) {
+    try { return JSON.parse(localStorage.getItem(draftKey(start)) || 'null'); } catch (e) { return null; }
+  }
+  function clearDraft(start) { try { localStorage.removeItem(draftKey(start)); } catch (e) {} }
+
+  // #md-content의 최상위 블록만 편집 대상 (data-line + DOM 순서 = 소스 순서)
+  function topBlocks() {
+    return Array.from(document.querySelectorAll('#md-content > [data-line]'))
+      .filter(el => el.dataset.line !== '');
+  }
+  function autoGrow(ta) { ta.style.height = 'auto'; ta.style.height = (ta.scrollHeight + 4) + 'px'; }
+
+  function closeEditor(box, block) {
+    box.remove();
+    block.classList.remove('md-editing');
+    __editorOpen = false;
+    if (__pendingReload !== null) { const l = __pendingReload; __pendingReload = null; applyReload(l); }
+  }
+
+  async function openEditor(block) {
+    if (__editorOpen) return;
+    const blocks = topBlocks();
+    const i = blocks.indexOf(block);
+    if (i < 0) return;
+    const start = parseInt(block.dataset.line);
+    const end = (i + 1 < blocks.length) ? parseInt(blocks[i + 1].dataset.line) - 1 : 99999;
+
+    let data;
+    try {
+      const r = await fetch('/__source?file=' + __filePathParam + '&start=' + start + '&end=' + end);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      data = await r.json();
+    } catch (err) { mdToast('원본 조회 실패: ' + err.message, 'error'); return; }
+    if (data.editable === false) { mdToast('embed 사용 파일은 인라인 편집 미지원', 'error'); return; }
+
+    __editorOpen = true;
+    if (window.getSelection) window.getSelection().removeAllRanges();
+
+    const box = document.createElement('div');
+    box.className = 'md-editor';
+    const ta = document.createElement('textarea');
+    ta.spellcheck = false;
+    const draft = readDraft(start);
+    ta.value = (draft && draft.base === data.text && draft.text !== data.text) ? draft.text : data.text;
+    if (ta.value !== data.text) mdToast('저장 안 된 초안 복원', 'success');
+
+    const bar = document.createElement('div');
+    bar.className = 'md-editor-bar';
+    const saveBtn = document.createElement('button'); saveBtn.className = 'md-save'; saveBtn.textContent = '저장';
+    const cancelBtn = document.createElement('button'); cancelBtn.textContent = '취소';
+    const hint = document.createElement('span'); hint.className = 'md-hint'; hint.textContent = '⌘↵ 저장 · Esc 취소 · 줄 ' + start;
+    bar.appendChild(saveBtn); bar.appendChild(cancelBtn); bar.appendChild(hint);
+    box.appendChild(ta); box.appendChild(bar);
+
+    block.classList.add('md-editing');
+    block.insertAdjacentElement('afterend', box);
+    autoGrow(ta); ta.focus();
+    saveDraft(start, data.text, ta.value);
+    ta.addEventListener('input', () => { autoGrow(ta); saveDraft(start, data.text, ta.value); });
+
+    let baseText = data.text;   // 충돌 해결(덮어쓰기) 시 현재 파일 블록으로 갱신
+    async function doSave() {
+      saveBtn.disabled = true;
+      try {
+        const r = await fetch('/__edit', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file: ${JSON.stringify(filePath)}, start, end, baseText, newText: ta.value })
+        });
+        if (r.ok) { clearDraft(start); mdToast('✓ 저장됨', 'success'); closeEditor(box, block); return; }
+        const info = await r.json().catch(() => ({}));
+        if (info.reason === 'embeds') { mdToast('embed 파일은 편집 미지원', 'error'); }
+        else if (info.reason === 'conflict') { showConflict(info.current || ''); }
+        else { mdToast('저장 실패: HTTP ' + r.status, 'error'); }
+      } catch (err) { mdToast('저장 실패: ' + err.message, 'error'); }
+      saveBtn.disabled = false;
+    }
+    function showConflict(current) {
+      let panel = box.querySelector('.md-conflict');
+      if (!panel) { panel = document.createElement('div'); panel.className = 'md-conflict'; box.appendChild(panel); }
+      panel.innerHTML = '';
+      const msg = document.createElement('div');
+      msg.textContent = '⚠ 그새 이 블록이 바뀌었습니다. 현재 파일 내용 ↓ (내 편집은 위에 보존됨)';
+      const pre = document.createElement('pre'); pre.textContent = current;
+      const ow = document.createElement('button'); ow.textContent = '현재 위에 덮어쓰기';
+      ow.onclick = () => { baseText = current; doSave(); };
+      panel.appendChild(msg); panel.appendChild(pre); panel.appendChild(ow);
+      mdToast('충돌 — 편집 내용은 보존됨', 'error');
+    }
+
+    saveBtn.onclick = doSave;
+    cancelBtn.onclick = () => { clearDraft(start); closeEditor(box, block); };
+    ta.addEventListener('keydown', (ev) => {
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') { ev.preventDefault(); doSave(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); clearDraft(start); closeEditor(box, block); }
+    });
+  }
+
+  document.getElementById('md-content').addEventListener('dblclick', (e) => {
+    if (__editorOpen) return;
+    const block = topBlocks().find(b => b.contains(e.target));
+    if (block) openEditor(block);
+  });
 </script>
 </body>
 </html>`;
@@ -937,6 +1144,65 @@ const server = http.createServer((req, res) => {
     } catch (e) {
       res.writeHead(500); res.end(e.message);
     }
+    return;
+  }
+
+  // 인라인 편집: 블록 원본 소스 슬라이스 조회 — /__source?file=&start=&end=
+  if (u.pathname === '/__source') {
+    const fileParam = u.searchParams.get('file');
+    const start = parseInt(u.searchParams.get('start'), 10);
+    const end = parseInt(u.searchParams.get('end'), 10);
+    if (!fileParam || !start || !end) { res.writeHead(400); res.end('missing params'); return; }
+    const absPath = decodeURIComponent(fileParam);
+    if (!isEditableFile(absPath)) { res.writeHead(403); res.end('not a markdown file'); return; }
+    try {
+      const content = fs.readFileSync(absPath, 'utf8');
+      const editable = !hasEmbeds(content);
+      const text = sliceLines(content, start, end);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ text, start, end, editable }));
+    } catch (e) { res.writeHead(500); res.end(e.message); }
+    return;
+  }
+
+  // 인라인 편집: 블록 저장 — POST /__edit {file, start, end, baseText, newText}
+  if (u.pathname === '/__edit' && req.method === 'POST') {
+    let buf = '';
+    req.on('data', chunk => {
+      buf += chunk;
+      if (buf.length > 5 * 1024 * 1024) { res.writeHead(413); res.end('payload too large'); req.destroy(); }
+    });
+    req.on('end', () => {
+      let body;
+      try { body = JSON.parse(buf || '{}'); } catch (e) { res.writeHead(400); res.end('invalid json'); return; }
+      const { file, start, end, baseText, newText } = body;
+      if (!file || typeof baseText !== 'string' || typeof newText !== 'string') {
+        res.writeHead(400); res.end('missing fields'); return;
+      }
+      const absPath = file;   // /__share와 동일하게 JSON body의 file은 원본 절대경로
+      if (!isEditableFile(absPath)) { res.writeHead(403); res.end('not a markdown file'); return; }
+      let content;
+      try { content = fs.readFileSync(absPath, 'utf8'); }
+      catch (e) { res.writeHead(404); res.end('file not found'); return; }
+      if (hasEmbeds(content)) {
+        res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ reason: 'embeds', message: 'embed 사용 파일은 인라인 편집 미지원' }));
+        return;
+      }
+      const cleanNew = String(newText).replace(/\n+$/, '');
+      const result = relocateAndReplace(content, baseText, cleanNew, start);
+      if (result.status === 'conflict') {
+        const current = sliceLines(content, start || 1, end || start || 1);
+        res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ reason: 'conflict', current }));
+        return;
+      }
+      try {
+        fs.writeFileSync(absPath, result.content, 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true }));
+      } catch (e) { res.writeHead(500); res.end(e.message); }
+    });
     return;
   }
 
@@ -1127,35 +1393,53 @@ function ensureDaemon() {
   }
 }
 
-if (DAEMON_MODE) {
-  // 백그라운드 daemon: 서버만 띄우고 영원히 실행
-  startServer();
-  process.on('SIGINT', () => { server.close(); process.exit(0); });
-  process.on('SIGTERM', () => { server.close(); process.exit(0); });
-} else if (RESOLVE_MODE) {
-  // mdwatch.app가 호출 — daemon 보장 후 URL만 stdout으로 반환
-  if (!cliFile) { console.error('mdwatch __resolve <file>'); process.exit(1); }
-  ensureDaemon();
-  process.stdout.write(`http://localhost:${PORT}${fileToUrl(cliFile)}`);
-  process.exit(0);
-} else {
-  // CLI 모드: 서버 없으면 fork로 띄우고, 브라우저 open
-  const openUrl = cliFile
-    ? `http://localhost:${PORT}${fileToUrl(cliFile)}`
-    : `http://localhost:${PORT}/`;
-
-  if (!isServerRunning()) {
+// 테스트 등에서 require 될 때는 실행 분기를 타지 않고 함수만 노출한다.
+if (require.main === module) {
+  if (DAEMON_MODE) {
+    // 백그라운드 daemon: 서버만 띄우고 영원히 실행
+    startServer();
+    process.on('SIGINT', () => { server.close(); process.exit(0); });
+    process.on('SIGTERM', () => { server.close(); process.exit(0); });
+  } else if (RESOLVE_MODE) {
+    // mdwatch.app가 호출 — daemon 보장 후 URL만 stdout으로 반환
+    if (!cliFile) { console.error('mdwatch __resolve <file>'); process.exit(1); }
     ensureDaemon();
-    console.log(`  mdwatch daemon started (log: ${LOG_FILE})`);
-  }
-
-  if (cliFile) {
-    console.log(`  open ${openUrl}`);
-    focusOrOpenTab(openUrl);
+    process.stdout.write(`http://localhost:${PORT}${fileToUrl(cliFile)}`);
+    process.exit(0);
   } else {
-    console.log(`  server: http://localhost:${PORT}/`);
-    console.log(`  usage: mdwatch <file.md>`);
+    // CLI 모드: 서버 없으면 fork로 띄우고, 브라우저 open
+    const openUrl = cliFile
+      ? `http://localhost:${PORT}${fileToUrl(cliFile)}`
+      : `http://localhost:${PORT}/`;
+
+    if (!isServerRunning()) {
+      ensureDaemon();
+      console.log(`  mdwatch daemon started (log: ${LOG_FILE})`);
+    }
+
+    if (cliFile) {
+      console.log(`  open ${openUrl}`);
+      focusOrOpenTab(openUrl);
+    } else {
+      console.log(`  server: http://localhost:${PORT}/`);
+      console.log(`  usage: mdwatch <file.md>`);
+    }
+    process.exit(0);
   }
-  process.exit(0);
 }
+
+// 테스트용 export (require.main !== module 일 때만 의미 있음)
+module.exports = {
+  diffLines,
+  fileToUrl,
+  urlToFile,
+  renderContent,
+  hasEmbeds,
+  isEditableFile,
+  sliceLines,
+  relocateAndReplace,
+  server,
+  ROOT,
+  PORT,
+};
 

@@ -1,0 +1,13 @@
+{
+  "name": "mdwatch",
+  "version": "1.0.0",
+  "description": "Markdown + Mermaid live preview with change-line highlight and inline block editing (macOS)",
+  "private": true,
+  "type": "commonjs",
+  "bin": { "mdwatch": "src/mdwatch.js" },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "license": "MIT",
+  "engines": { "node": ">=16" }
+}
