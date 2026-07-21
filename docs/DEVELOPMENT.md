@@ -111,6 +111,16 @@ URL 구조를 `/:root/path` 형태로 변경 필요. `urlToFile` / `fileToUrl` �
 
 참고 (2026-07-16): innerHTML 교체 후 highlight.js·KaTeX·ECharts·TOC를 재적용하도록 수정됨. ECharts spec은 페이지 전역 변수가 아니라 각 div의 `data-spec` 속성에 내장되어, 부분 갱신 후에도 차트가 유지된다 (이전에는 SSE 갱신 시 차트가 사라지는 버그 있었음).
 
+### 9. 인라인 블록 편집 — 구현됨 (2026-07-21)
+
+전체 흐름·설계 결정은 [ARCHITECTURE.md](ARCHITECTURE.md#인라인-블록-편집-저장-흐름), 사용법은 [FEATURES.md](FEATURES.md#인라인-블록-편집) 참조. 여기서는 **어디를 손대는지**만.
+
+- **순수 함수**(테스트 대상): `sliceLines(content,start,end)` 블록 소스 슬라이스(후행 빈 줄 트림) · `relocateAndReplace(content,base,new,hint)` 내용 기반 재탐색 치환(줄 경계 매치, 중복 시 hint 최근접) · `hasEmbeds`/`isEditableFile` 가드. 새 순수 함수는 `module.exports`에 등록하고 `test/`에 케이스 추가.
+- **엔드포인트**: `GET /__source`, `POST /__edit` (server 핸들러 내, `/__content` 다음). `file` 경로 검증은 `.md`/`.markdown` 한정. 쓰기가 붙었으므로 스코프를 넓힐 땐 신뢰 경계(로컬 전용) 재확인.
+- **클라이언트**(buildHTML `<script>`): `openEditor`/`applyReload`(SSE 큐잉)/충돌 UI/localStorage 초안. 편집 대상은 `#md-content > [data-line]` 최상위 블록.
+- **가드**: embed(`{{$…}}`) 파일은 `processEmbeds`가 줄수를 안 맞춰 data-line이 어긋나므로 편집 비활성.
+- **확장 여지 (Phase 2)**: 현재 입도는 블록 통째. 표 셀 단위 편집은 표 렌더러(`table`)가 셀에 좌표를 심고, 클라이언트가 셀 클릭 → 파이프테이블 재직렬화하는 경로가 필요.
+
 ## 디버깅 팁
 
 ### daemon 로그 확인

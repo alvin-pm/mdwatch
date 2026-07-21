@@ -12,7 +12,7 @@
 
 ## 2026-07-21 — 인라인 블록 편집 + 자동화 테스트 (브랜치 `feat/inline-block-edit`)
 
-설계: [PROPOSAL-inline-edit.md](PROPOSAL-inline-edit.md).
+설계·흐름: [ARCHITECTURE.md](ARCHITECTURE.md) · 확장 지점: [DEVELOPMENT.md](DEVELOPMENT.md) §9 · 사용법: [FEATURES.md](FEATURES.md).
 
 1. **인라인 블록 편집** — 렌더 화면에서 블록을 **더블클릭 → 소스 textarea 즉석 편집 → 저장**(⌘↵). 전체 재직렬화 없이 그 블록만 국소 치환해 git diff를 해치지 않는다.
    - **내용 기반 재탐색**: 편집 시작 시점의 블록 원본을 현재 파일에서 다시 찾아 치환 → AI가 다른 곳을 고쳐 줄이 밀려도 자동 적용, 그 블록 자체가 바뀐 경우에만 충돌.

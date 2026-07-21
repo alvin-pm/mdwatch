@@ -88,6 +88,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));
 
 
 // 환경변수 오버라이드 가능 (기본: 7474, ~/argo)
+const VERSION = '1.0.0';
 const PORT = parseInt(process.env.MDWATCH_PORT, 10) || 7474;
 const ROOT = process.env.MDWATCH_ROOT
   ? path.resolve(process.env.MDWATCH_ROOT)
@@ -101,9 +102,11 @@ const LOG_FILE = path.resolve(process.env.HOME, '.mdwatch.log');
 const DAEMON_MODE  = process.argv[2] === '__daemon__';
 const RESOLVE_MODE = process.argv[2] === '__resolve';
 
-const _fileArg = RESOLVE_MODE ? process.argv[3]
+const _rawArg = RESOLVE_MODE ? process.argv[3]
               : DAEMON_MODE  ? null
                              : process.argv[2] || null;
+// 플래그(-v/--version/-h/--help)는 파일 인자가 아님
+const _fileArg = (_rawArg && _rawArg.startsWith('-')) ? null : _rawArg;
 const cliFile = _fileArg ? (() => {
   const abs = path.resolve(_fileArg);
   try { return fs.realpathSync(abs); } catch { return abs; }
@@ -1373,12 +1376,22 @@ end run`;
   return null;
 }
 
+// 플랫폼별 브라우저 열기 (best-effort). macOS는 검증됨, 그 외는 무보장.
+function openInBrowser(url) {
+  const cmd = process.platform === 'darwin' ? `open "${url}"`
+            : process.platform === 'win32'  ? `start "" "${url}"`
+                                            : `xdg-open "${url}"`; // linux 등
+  try { execSync(cmd); } catch (e) {
+    console.error(`  [mdwatch] 브라우저 자동 열기 실패 — 수동으로 여세요: ${url}`);
+  }
+}
+
 function focusOrOpenTab(url) {
-  const browser = detectDefaultBrowser();
+  // 탭 focus(중복 탭 방지)는 macOS AppleScript 전용. 그 외 플랫폼은 새 탭 open만.
+  const browser = process.platform === 'darwin' ? detectDefaultBrowser() : null;
   const script = browser ? buildFocusScript(browser) : null;
   if (!script) {
-    console.error('  [mdwatch] no browser detected, falling back to `open`');
-    try { execSync(`open "${url}"`); } catch {}
+    openInBrowser(url);
     return;
   }
   const { spawnSync } = require('child_process');
@@ -1389,7 +1402,7 @@ function focusOrOpenTab(url) {
   });
   if (result.status !== 0 || result.error) {
     console.error(`  [mdwatch] osascript failed (status=${result.status}): ${result.stderr || result.error?.message}`);
-    try { execSync(`open "${url}"`); } catch {}
+    openInBrowser(url);
   }
 }
 
@@ -1423,6 +1436,13 @@ if (require.main === module) {
     process.stdout.write(`http://localhost:${PORT}${fileToUrl(cliFile)}`);
     process.exit(0);
   } else {
+    if (_rawArg === '-v' || _rawArg === '--version') {
+      console.log('mdwatch ' + VERSION); process.exit(0);
+    }
+    if (_rawArg === '-h' || _rawArg === '--help') {
+      console.log('mdwatch ' + VERSION + '\n사용법: mdwatch <file.md>\n환경변수: MDWATCH_PORT(기본 7474) · MDWATCH_ROOT(기본 ~/argo)');
+      process.exit(0);
+    }
     // CLI 모드: 서버 없으면 fork로 띄우고, 브라우저 open
     const openUrl = cliFile
       ? `http://localhost:${PORT}${fileToUrl(cliFile)}`
