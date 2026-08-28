@@ -476,7 +476,7 @@ ${mathCount > 0 ? '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/kat
   blockquote[data-line]::before { display:none; }
   blockquote [data-line]::before { left: -72px; }
   .table-wrap { overflow-x:auto; margin:1em 0; }
-  table { border-collapse:collapse; width:100%; table-layout:fixed; }
+  table { border-collapse:collapse; width:max-content; max-width:100%; table-layout:auto; }
   th,td { border:1px solid var(--td-bd); padding:0.5em 0.75em; vertical-align:top; word-break:break-word; }
   th { background:var(--th-bg); font-weight:600; text-align:left; }
   .col-label { width:10%; }
